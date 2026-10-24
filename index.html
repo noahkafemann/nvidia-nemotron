@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-api-key="__NVIDIA_API_KEY__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -245,7 +245,7 @@ button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 <script>
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
 const MODEL = 'nvidia/nemotron-4-340b-instruct';
-const API_KEY_ENV = 'VITE_NVIDIA_API_KEY';
+const API_KEY_ATTR = 'data-api-key';
 
 const messagesEl = document.getElementById('messages');
 const form = document.getElementById('chatForm');
@@ -298,7 +298,7 @@ form.addEventListener('submit', async (e) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env[API_KEY_ENV] || window[API_KEY_ENV] || ''}`
+        'Authorization': `Bearer ${document.documentElement.getAttribute(API_KEY_ATTR) || ''}`
       },
       body: JSON.stringify({
         model: MODEL,
@@ -323,7 +323,7 @@ form.addEventListener('submit', async (e) => {
     bubble.textContent = 'Fehler: ' + err.message;
     typingDiv.classList.remove('typing');
     setStatus('Fehler aufgetreten');
-    console.error(err);
+    console.error('Chat-Fehler:', err);
   } finally {
     messagesEl.scrollTop = messagesEl.scrollHeight;
     sendBtn.disabled = false;
