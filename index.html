@@ -14,6 +14,8 @@
   --muted: #94a3b8;
   --border: rgba(0, 242, 255, 0.15);
   --glass: rgba(255, 255, 255, 0.03);
+  --success: #22d3ee;
+  --error: #f87171;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -84,6 +86,7 @@ header p {
   padding-right: 0.5rem;
   scrollbar-width: thin;
   scrollbar-color: var(--accent-dim) transparent;
+  scroll-behavior: smooth;
 }
 
 .messages::-webkit-scrollbar { width: 6px; }
@@ -94,6 +97,8 @@ header p {
   gap: 1rem;
   margin-bottom: 1.25rem;
   animation: slideUp 0.5s ease;
+  opacity: 0;
+  animation-fill-mode: forwards;
 }
 
 .msg.user { flex-direction: row-reverse; }
@@ -118,10 +123,12 @@ header p {
   border-radius: 1.2rem;
   background: var(--glass);
   border: 1px solid var(--border);
-  line-height: 1.55;
+  line-height: 1.6;
   font-size: 0.98rem;
   backdrop-filter: blur(8px);
   position: relative;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .msg.user .bubble {
@@ -134,6 +141,16 @@ header p {
 .msg.assistant .bubble {
   border-bottom-left-radius: 0.3rem;
   color: var(--text);
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  background: var(--accent);
+  animation: blink 1s infinite;
+  vertical-align: middle;
+  margin-left: 2px;
 }
 
 .typing {
@@ -168,6 +185,7 @@ input {
   color: var(--text);
   font-size: 1rem;
   outline: none;
+  resize: none;
 }
 
 input::placeholder { color: var(--muted); }
@@ -197,6 +215,40 @@ button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   text-align: center;
 }
 
+.key-warning {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--error);
+  text-align: center;
+  display: none;
+  animation: fadeIn 0.4s ease;
+}
+
+code {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9em;
+  background: rgba(255,255,255,0.05);
+  padding: 0.15em 0.3em;
+  border-radius: 4px;
+  color: var(--success);
+}
+
+pre {
+  background: rgba(0,0,0,0.3);
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+pre code {
+  display: block;
+  background: none;
+  padding: 0;
+  color: var(--text);
+}
+
 @keyframes fadeInDown {
   from { opacity: 0; transform: translateY(-12px); }
   to { opacity: 1; transform: translateY(0); }
@@ -217,6 +269,16 @@ button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   50% { width: 9ch; }
 }
 
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (max-width: 600px) {
   app { padding: 1rem 0.5rem; }
   .bubble { max-width: 85%; font-size: 0.9rem; }
@@ -235,10 +297,11 @@ button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
   <input-area>
     <form id="chatForm">
-      <input id="userInput" type="text" placeholder="Nachricht eingenden..." autocomplete="off" />
+      <input id="userInput" type="text" placeholder="Nachricht eingeben..." autocomplete="off" />
       <button type="submit" class="send" id="sendBtn">&#9654;</button>
     </form>
     <div class="status" id="status">Bereit</div>
+    <div class="key-warning" id="keyWarning">Kein API Key konfiguriert. Bitte den Secret 'NVIDIA_API_KEY' im Repository hinterlegen.</div>
   </input-area>
 </app>
 
@@ -246,16 +309,29 @@ button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
 const MODEL = 'nvidia/nemotron-4-340b-instruct';
 const API_KEY_ATTR = 'data-api-key';
+const STORAGE_KEY = 'nemotron_api_key';
 
 const messagesEl = document.getElementById('messages');
 const form = document.getElementById('chatForm');
 const input = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const statusEl = document.getElementById('status');
+const keyWarning = document.getElementById('keyWarning');
 
 let history = [
   { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
 ];
+let streamController = null;
+
+function resolveApiKey() {
+  const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
+  const fromStorage = localStorage.getItem(STORAGE_KEY) || '';
+  return fromAttr !== '__NVIDIA_API_KEY__' ? fromAttr : fromStorage;
+}
+
+function hasApiKey() {
+  return resolveApiKey().length > 0;
+}
 
 function addMessage(role, content, typing = false) {
   const div = document.createElement('div');
@@ -266,7 +342,7 @@ function addMessage(role, content, typing = false) {
     <div class="bubble${typing ? ' typing' : ''}">${escapeHtml(content)}</div>
   `;
   messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  scrollToBottom();
   return div;
 }
 
@@ -276,12 +352,42 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-function setStatus(text) { statusEl.textContent = text; }
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n\n+/g, '<br><br>')
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+}
+
+function scrollToBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setStatus(text, type = 'muted') {
+  statusEl.textContent = text;
+  statusEl.style.color = type === 'error' ? 'var(--error)' : type === 'success' ? 'var(--success)' : 'var(--muted)';
+}
+
+function showKeyWarning(show) {
+  keyWarning.style.display = show ? 'block' : 'none';
+}
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
   if (!text) return;
+
+  if (!hasApiKey()) {
+    showKeyWarning(true);
+    setStatus('Kein API Key', 'error');
+    return;
+  }
+  showKeyWarning(false);
 
   input.value = '';
   sendBtn.disabled = true;
@@ -294,11 +400,13 @@ form.addEventListener('submit', async (e) => {
   const bubble = typingDiv.querySelector('.bubble');
 
   try {
+    streamController = new AbortController();
+
     const response = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${document.documentElement.getAttribute(API_KEY_ATTR) || ''}`
+        'Authorization': `Bearer ${resolveApiKey()}`
       },
       body: JSON.stringify({
         model: MODEL,
@@ -306,27 +414,66 @@ form.addEventListener('submit', async (e) => {
         temperature: 0.7,
         top_p: 1,
         max_tokens: 1024,
-        stream: false
-      })
+        stream: true
+      }),
+      signal: streamController.signal
     });
 
     if (!response.ok) throw new Error(`API-Fehler: ${response.status}`);
+    if (!response.body) throw new Error('Keine Antwort vom Server');
 
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
-    history.push({ role: 'assistant', content: reply });
-
-    bubble.textContent = reply;
     typingDiv.classList.remove('typing');
+    let fullReply = '';
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullReply += delta;
+            bubble.innerHTML = renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
+            scrollToBottom();
+          }
+        } catch (err) {
+          // ignorieren ungültige SSE-Zeilen
+        }
+      }
+    }
+
+    bubble.innerHTML = renderMarkdown(fullReply);
+    history.push({ role: 'assistant', content: fullReply });
     setStatus('Bereit');
   } catch (err) {
-    bubble.textContent = 'Fehler: ' + err.message;
+    if (err.name === 'AbortError') {
+      setStatus('Abgebrochen');
+      return;
+    }
+    bubble.innerHTML = '<span style="color: var(--error)">Fehler: ' + escapeHtml(err.message) + '</span>';
     typingDiv.classList.remove('typing');
-    setStatus('Fehler aufgetreten');
+    setStatus('Fehler aufgetreten', 'error');
     console.error('Chat-Fehler:', err);
   } finally {
     messagesEl.scrollTop = messagesEl.scrollHeight;
     sendBtn.disabled = false;
+    streamController = null;
+  }
+});
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
   }
 });
 </script>
