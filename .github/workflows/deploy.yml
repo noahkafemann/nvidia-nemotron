@@ -2,7 +2,7 @@ name: Deploy Nemotron Chat
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, test-for-github-pages]
 
 permissions:
   contents: read
@@ -25,7 +25,11 @@ jobs:
 
       - name: Inject API key
         run: |
-          sed -i "s|__NVIDIA_API_KEY__|${{ secrets.NVIDIA_API_KEY }}|g" index.html
+          if grep -q '__NVIDIA_API_KEY__' index.html; then
+            sed -i "s|__NVIDIA_API_KEY__|${{ secrets.NVIDIA_API_KEY }}|g" index.html
+          else
+            echo "API key placeholder already replaced or not found"
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
