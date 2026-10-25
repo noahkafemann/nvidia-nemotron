@@ -326,7 +326,11 @@ let streamController = null;
 function resolveApiKey() {
   const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
   const fromStorage = localStorage.getItem(STORAGE_KEY) || '';
-  return fromAttr !== '__NVIDIA_API_KEY__' ? fromAttr : fromStorage;
+  const key = fromAttr !== '__NVIDIA_API_KEY__' && fromAttr.length > 0 ? fromAttr : fromStorage;
+  if (!key || key === '__NVIDIA_API_KEY__') {
+    console.warn('[Nemotron] Kein API Key gefunden. data-api-key=', fromAttr, 'localStorage=', !!fromStorage);
+  }
+  return key;
 }
 
 function hasApiKey() {
@@ -382,12 +386,16 @@ form.addEventListener('submit', async (e) => {
   const text = input.value.trim();
   if (!text) return;
 
-  if (!hasApiKey()) {
+  const apiKey = resolveApiKey();
+  if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
     showKeyWarning(true);
     setStatus('Kein API Key', 'error');
+    addMessage('assistant', '<span style="color: var(--error)">Fehler: Kein NVIDIA API Key konfiguriert. Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings → Secrets and variables → Actions hinzu.</span>');
     return;
   }
   showKeyWarning(false);
+
+  console.log('[Nemotron] Sende Request mit API Key:', apiKey.substring(0, 8) + '...');
 
   input.value = '';
   sendBtn.disabled = true;
@@ -406,7 +414,7 @@ form.addEventListener('submit', async (e) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resolveApiKey()}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: MODEL,
@@ -419,23 +427,31 @@ form.addEventListener('submit', async (e) => {
       signal: streamController.signal
     });
 
-    if (!response.ok) throw new Error(`API-Fehler: ${response.status}`);
+    console.log('[Nemotron] Response status:', response.status, response.statusText);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[Nemotron] API Error body:', errText);
+      throw new Error(`API-Fehler: ${response.status} ${response.statusText}`);
+    }
     if (!response.body) throw new Error('Keine Antwort vom Server');
 
     typingDiv.classList.remove('typing');
     let fullReply = '';
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
 
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
+        const data = line.slice(6).trim();
         if (data === '[DONE]') continue;
         try {
           const parsed = JSON.parse(data);
@@ -451,18 +467,31 @@ form.addEventListener('submit', async (e) => {
       }
     }
 
-    bubble.innerHTML = renderMarkdown(fullReply);
+    // Rest im Buffer verarbeiten
+    if (buffer.startsWith('data: ')) {
+      const data = buffer.slice(6).trim();
+      if (data !== '[DONE]') {
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta?.content || '';
+          if (delta) fullReply += delta;
+        } catch (err) {}
+      }
+    }
+
+    bubble.innerHTML = renderMarkdown(fullReply || 'Keine Antwort erhalten.');
     history.push({ role: 'assistant', content: fullReply });
     setStatus('Bereit');
+    console.log('[Nemotron] Antwort empfangen:', fullReply.substring(0, 100) + '...');
   } catch (err) {
     if (err.name === 'AbortError') {
       setStatus('Abgebrochen');
       return;
     }
+    console.error('[Nemotron] Chat-Fehler:', err);
     bubble.innerHTML = '<span style="color: var(--error)">Fehler: ' + escapeHtml(err.message) + '</span>';
     typingDiv.classList.remove('typing');
     setStatus('Fehler aufgetreten', 'error');
-    console.error('Chat-Fehler:', err);
   } finally {
     messagesEl.scrollTop = messagesEl.scrollHeight;
     sendBtn.disabled = false;

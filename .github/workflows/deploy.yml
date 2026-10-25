@@ -15,21 +15,24 @@ concurrency:
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Inject API key
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         run: |
-          if grep -q '__NVIDIA_API_KEY__' index.html; then
-            sed -i "s|__NVIDIA_API_KEY__|${{ secrets.NVIDIA_API_KEY }}|g" index.html
-          else
-            echo "API key placeholder already replaced or not found"
-          fi
+          python3 -c "
+import os
+key = os.environ.get('NVIDIA_API_KEY', '')
+with open('index.html', 'r') as f:
+    content = f.read()
+content = content.replace('__NVIDIA_API_KEY__', key)
+with open('index.html', 'w') as f:
+    f.write(content)
+"
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -40,5 +43,4 @@ jobs:
           path: '.'
 
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4
