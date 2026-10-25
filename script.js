@@ -11,6 +11,8 @@ const statusEl = document.getElementById('status');
 const keyWarning = document.getElementById('key-warning');
 const modelSelect = document.getElementById('modelSelect');
 const clearChatBtn = document.getElementById('clearChatBtn');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const saveKeyBtn = document.getElementById('saveKeyBtn');
 const apiStatusDot = document.querySelector('.status-dot');
 const apiStatusText = document.getElementById('apiStatusText');
 
@@ -291,3 +293,28 @@ clearChatBtn.addEventListener('click', () => {
 
 // Init
 resolveApiKey();
+
+// Lade gespeicherten Key ins Inputfeld
+if (apiKeyInput) {
+  const storedKey = localStorage.getItem(STORAGE_KEY);
+  if (storedKey) {
+    apiKeyInput.value = storedKey;
+  }
+
+  saveKeyBtn.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    if (key) {
+      localStorage.setItem(STORAGE_KEY, key);
+      resolveApiKey();
+      setStatus('API Key gespeichert', 'success');
+      keyWarning.style.display = 'none';
+      apiKeyInput.value = '';
+    }
+  });
+
+  apiKeyInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      saveKeyBtn.click();
+    }
+  });
+}
