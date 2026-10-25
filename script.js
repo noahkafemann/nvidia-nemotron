@@ -1,5 +1,5 @@
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
-const MODEL = 'nvidia/nemotron-4-340b-instruct';
+const MODEL = 'nemotron-3-ultra-550b-a55b';
 const API_KEY_ATTR = 'data-api-key';
 const STORAGE_KEY = 'nemotron_api_key';
 
@@ -116,7 +116,8 @@ form.addEventListener('submit', async (e) => {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      throw new Error(`API-Fehler: ${response.status} ${response.statusText}${errText ? ' — ' + errText.substring(0, 200) : ''}`);
+      console.error('[Nemotron] Non-streaming API Error:', response.status, errText);
+      throw new Error(`API-Fehler (${response.status}): ${errText.substring(0, 300)}`);
     }
 
     const data = await response.json();
@@ -151,7 +152,7 @@ form.addEventListener('submit', async (e) => {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
-      console.error('[Nemotron] Streaming API Error:', errText);
+      console.error('[Nemotron] Streaming API Error:', response.status, errText);
       typingDiv.classList.remove('typing');
       bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
       await tryNonStreaming();
