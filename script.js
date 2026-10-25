@@ -1,5 +1,5 @@
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
-const MODEL = 'nvidia/nemotron-4-340b-instruct';
+const MODEL = 'nemotron-3-ultra-550b-a55b';
 const API_KEY_ATTR = 'data-api-key';
 const STORAGE_KEY = 'nemotron_api_key';
 
