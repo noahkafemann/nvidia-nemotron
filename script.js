@@ -1,5 +1,5 @@
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
-const MODEL = 'nemotron-3-ultra-550b-a55b';
+const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
 const API_KEY_ATTR = 'data-api-key';
 const STORAGE_KEY = 'nemotron_api_key';
 
@@ -9,11 +9,16 @@ const input = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const statusEl = document.getElementById('status');
 const keyWarning = document.getElementById('key-warning');
+const modelSelect = document.getElementById('modelSelect');
+const clearChatBtn = document.getElementById('clearChatBtn');
+const apiStatusDot = document.querySelector('.status-dot');
+const apiStatusText = document.getElementById('apiStatusText');
 
 let history = [
   { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
 ];
 let streamController = null;
+let currentModel = DEFAULT_MODEL;
 
 function resolveApiKey() {
   const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
@@ -21,6 +26,9 @@ function resolveApiKey() {
   const key = fromAttr !== '__NVIDIA_API_KEY__' && fromAttr.length > 0 ? fromAttr : fromStorage;
   if (!key || key === '__NVIDIA_API_KEY__') {
     console.warn('[Nemotron] Kein API Key gefunden.');
+    updateApiStatus(false);
+  } else {
+    updateApiStatus(true);
   }
   return key;
 }
@@ -29,17 +37,15 @@ function hasApiKey() {
   return resolveApiKey().length > 0;
 }
 
-function addMessage(role, content, typing = false) {
-  const div = document.createElement('div');
-  div.className = 'msg ' + role;
-  const avatar = role === 'user' ? '&#128101;' : '&#128169;';
-  div.innerHTML = `
-    <div class="avatar">${avatar}</div>
-    <div class="bubble${typing ? ' typing' : ''}">${escapeHtml(content)}</div>
-  `;
-  messagesEl.appendChild(div);
-  scrollToBottom();
-  return div;
+function updateApiStatus(ok) {
+  if (!apiStatusDot || !apiStatusText) return;
+  if (ok) {
+    apiStatusDot.className = 'status-dot ok';
+    apiStatusText.textContent = 'API Key bereit';
+  } else {
+    apiStatusDot.className = 'status-dot';
+    apiStatusText.textContent = 'Kein API Key';
+  }
 }
 
 function escapeHtml(str) {
@@ -73,6 +79,72 @@ function showKeyWarning(show) {
   keyWarning.style.display = show ? 'block' : 'none';
 }
 
+function addMessage(role, content, typing = false) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const avatar = role === 'user' ? '&#128101;' : '&#128169;';
+  div.innerHTML = `
+    <div class="avatar">${avatar}</div>
+    <div class="bubble${typing ? ' typing' : ''}">${escapeHtml(content)}</div>
+  `;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+function clearChat() {
+  messagesEl.innerHTML = '';
+  history = [
+    { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
+  ];
+  const welcome = addMessage('assistant', 'Chat geleert. Wie kann ich dir helfen?', false);
+  welcome.classList.add('welcome');
+}
+
+function createTypingBubble() {
+  const div = document.createElement('div');
+  div.className = 'msg assistant';
+  div.innerHTML = `
+    <div class="avatar">&#128169;</div>
+    <div class="bubble typing"><span class="stream-cursor"></span></div>
+  `;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+  return div.querySelector('.bubble');
+}
+
+async function tryNonStreaming(apiKey, bubble, typingDiv) {
+  const response = await fetch(`${API_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: currentModel,
+      messages: history,
+      temperature: 0.7,
+      top_p: 1,
+      max_tokens: 1024,
+      stream: false
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    console.error('[Nemotron] Non-streaming API Error:', response.status, errText);
+    throw new Error(`API-Fehler (${response.status}): ${errText.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+  bubble.innerHTML = renderMarkdown(reply);
+  history.push({ role: 'assistant', content: reply });
+  setStatus('Bereit');
+  console.log('[Nemotron] Non-streaming Antwort:', reply.substring(0, 100) + '...');
+  return reply;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const text = input.value.trim();
@@ -82,7 +154,7 @@ form.addEventListener('submit', async (e) => {
   if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
     showKeyWarning(true);
     setStatus('Kein API Key', 'error');
-    addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings → Secrets and variables → Actions hinzu.');
+    addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings &#8594; Secrets and variables &#8594; Actions hinzu.');
     return;
   }
   showKeyWarning(false);
@@ -94,39 +166,15 @@ form.addEventListener('submit', async (e) => {
   addMessage('user', text);
   history.push({ role: 'user', content: text });
 
-  const typingDiv = addMessage('assistant', '', true);
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg assistant';
+  typingDiv.innerHTML = `
+    <div class="avatar">&#128169;</div>
+    <div class="bubble typing"><span class="stream-cursor"></span></div>
+  `;
+  messagesEl.appendChild(typingDiv);
+  scrollToBottom();
   const bubble = typingDiv.querySelector('.bubble');
-
-  async function tryNonStreaming() {
-    const response = await fetch(`${API_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: history,
-        temperature: 0.7,
-        top_p: 1,
-        max_tokens: 1024,
-        stream: false
-      })
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.error('[Nemotron] Non-streaming API Error:', response.status, errText);
-      throw new Error(`API-Fehler (${response.status}): ${errText.substring(0, 300)}`);
-    }
-
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
-    bubble.innerHTML = renderMarkdown(reply);
-    history.push({ role: 'assistant', content: reply });
-    setStatus('Bereit');
-    console.log('[Nemotron] Non-streaming Antwort:', reply.substring(0, 100) + '...');
-  }
 
   try {
     streamController = new AbortController();
@@ -138,7 +186,7 @@ form.addEventListener('submit', async (e) => {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: currentModel,
         messages: history,
         temperature: 0.7,
         top_p: 1,
@@ -153,14 +201,13 @@ form.addEventListener('submit', async (e) => {
     if (!response.ok) {
       const errText = await response.text().catch(() => '');
       console.error('[Nemotron] Streaming API Error:', response.status, errText);
-      typingDiv.classList.remove('typing');
       bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
-      await tryNonStreaming();
+      await tryNonStreaming(apiKey, bubble, typingDiv);
       return;
     }
     if (!response.body) throw new Error('Keine Antwort vom Server');
 
-    typingDiv.classList.remove('typing');
+    bubble.classList.remove('typing');
     let fullReply = '';
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -211,12 +258,12 @@ form.addEventListener('submit', async (e) => {
     }
     console.error('[Nemotron] Chat-Fehler:', err);
     try {
-      typingDiv.classList.remove('typing');
+      bubble.classList.remove('typing');
       bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
-      await tryNonStreaming();
+      await tryNonStreaming(apiKey, bubble, typingDiv);
     } catch (fallbackErr) {
       bubble.innerHTML = '<span style="color: var(--error); font-weight: bold">Fehler: ' + escapeHtml(fallbackErr.message || err.message) + '</span>';
-      typingDiv.classList.remove('typing');
+      bubble.classList.remove('typing');
       setStatus('Fehler aufgetreten', 'error');
     }
   } finally {
@@ -232,3 +279,15 @@ input.addEventListener('keydown', (e) => {
     form.requestSubmit();
   }
 });
+
+modelSelect.addEventListener('change', (e) => {
+  currentModel = e.target.value;
+  console.log('[Nemotron] Modell gewechselt zu:', currentModel);
+});
+
+clearChatBtn.addEventListener('click', () => {
+  clearChat();
+});
+
+// Init
+resolveApiKey();
