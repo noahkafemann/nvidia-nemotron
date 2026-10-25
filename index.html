@@ -390,12 +390,10 @@ form.addEventListener('submit', async (e) => {
   if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
     showKeyWarning(true);
     setStatus('Kein API Key', 'error');
-    addMessage('assistant', '<span style="color: var(--error)">Fehler: Kein NVIDIA API Key konfiguriert. Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings → Secrets and variables → Actions hinzu.</span>');
+    addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings → Secrets and variables → Actions hinzu.');
     return;
   }
   showKeyWarning(false);
-
-  console.log('[Nemotron] Sende Request mit API Key:', apiKey.substring(0, 8) + '...');
 
   input.value = '';
   sendBtn.disabled = true;
@@ -406,6 +404,36 @@ form.addEventListener('submit', async (e) => {
 
   const typingDiv = addMessage('assistant', '', true);
   const bubble = typingDiv.querySelector('.bubble');
+
+  async function tryNonStreaming() {
+    const response = await fetch(`${API_BASE}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: history,
+        temperature: 0.7,
+        top_p: 1,
+        max_tokens: 1024,
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`API-Fehler: ${response.status} ${response.statusText}${errText ? ' — ' + errText.substring(0, 200) : ''}`);
+    }
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+    bubble.innerHTML = renderMarkdown(reply);
+    history.push({ role: 'assistant', content: reply });
+    setStatus('Bereit');
+    console.log('[Nemotron] Non-streaming Antwort:', reply.substring(0, 100) + '...');
+  }
 
   try {
     streamController = new AbortController();
@@ -427,12 +455,15 @@ form.addEventListener('submit', async (e) => {
       signal: streamController.signal
     });
 
-    console.log('[Nemotron] Response status:', response.status, response.statusText);
+    console.log('[Nemotron] Streaming Response status:', response.status, response.statusText);
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error('[Nemotron] API Error body:', errText);
-      throw new Error(`API-Fehler: ${response.status} ${response.statusText}`);
+      const errText = await response.text().catch(() => '');
+      console.error('[Nemotron] Streaming API Error:', errText);
+      typingDiv.classList.remove('typing');
+      bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
+      await tryNonStreaming();
+      return;
     }
     if (!response.body) throw new Error('Keine Antwort vom Server');
 
@@ -461,13 +492,10 @@ form.addEventListener('submit', async (e) => {
             bubble.innerHTML = renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
             scrollToBottom();
           }
-        } catch (err) {
-          // ignorieren ungültige SSE-Zeilen
-        }
+        } catch (err) {}
       }
     }
 
-    // Rest im Buffer verarbeiten
     if (buffer.startsWith('data: ')) {
       const data = buffer.slice(6).trim();
       if (data !== '[DONE]') {
@@ -482,16 +510,22 @@ form.addEventListener('submit', async (e) => {
     bubble.innerHTML = renderMarkdown(fullReply || 'Keine Antwort erhalten.');
     history.push({ role: 'assistant', content: fullReply });
     setStatus('Bereit');
-    console.log('[Nemotron] Antwort empfangen:', fullReply.substring(0, 100) + '...');
+    console.log('[Nemotron] Streaming Antwort:', fullReply.substring(0, 100) + '...');
   } catch (err) {
     if (err.name === 'AbortError') {
       setStatus('Abgebrochen');
       return;
     }
     console.error('[Nemotron] Chat-Fehler:', err);
-    bubble.innerHTML = '<span style="color: var(--error)">Fehler: ' + escapeHtml(err.message) + '</span>';
-    typingDiv.classList.remove('typing');
-    setStatus('Fehler aufgetreten', 'error');
+    try {
+      typingDiv.classList.remove('typing');
+      bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
+      await tryNonStreaming();
+    } catch (fallbackErr) {
+      bubble.innerHTML = '<span style="color: var(--error); font-weight: bold">Fehler: ' + escapeHtml(fallbackErr.message || err.message) + '</span>';
+      typingDiv.classList.remove('typing');
+      setStatus('Fehler aufgetreten', 'error');
+    }
   } finally {
     messagesEl.scrollTop = messagesEl.scrollHeight;
     sendBtn.disabled = false;
