@@ -8,22 +8,85 @@
 </head>
 <body>
 <div class="grid-bg"></div>
+
 <app>
-  <header>
-    <h1>Nemotron Chat</h1>
-    <p>NVIDIA Nemotron &middot; Futuristic Interface</p>
-  </header>
+  <sidebar>
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">N</div>
+        <div class="logo-text">Nemotron</div>
+      </div>
+    </div>
 
-  <messages id="messages"></messages>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">
+        <span class="nav-icon">&#128172;</span>
+        <span class="nav-label">Chat</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#128196;</span>
+        <span class="nav-label">Verlauf</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#128106;</span>
+        <span class="nav-label">Einstellungen</span>
+      </div>
+    </nav>
 
-  <input-area>
-    <form id="chatForm">
-      <input id="userInput" type="text" placeholder="Nachricht eingeben..." autocomplete="off" />
-      <button type="submit" class="send" id="sendBtn">&#9654;</button>
-    </form>
-    <div class="status" id="status">Bereit</div>
-    <div class="key-warning" id="key-warning">Kein API Key konfiguriert. Bitte den Secret 'NVIDIA_API_KEY' im Repository hinterlegen.</div>
-  </input-area>
+    <div class="sidebar-footer">
+      <div class="model-selector">
+        <label class="sidebar-label">Modell</label>
+        <select id="modelSelect" class="model-select">
+          <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra 550B</option>
+          <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama 3.1 Nemotron 70B</option>
+          <option value="nvidia/nemotron-4-340b-instruct">Nemotron 4 340B</option>
+        </select>
+      </div>
+
+      <div class="sidebar-action">
+        <button id="clearChatBtn" class="btn-clear">&#128465; Chat leeren</button>
+      </div>
+
+      <div class="status-indicator" id="apiStatus">
+        <span class="status-dot"></span>
+        <span id="apiStatusText">Prüfe Key...</span>
+      </div>
+    </div>
+  </sidebar>
+
+  <main>
+    <header class="app-header">
+      <h1>Nemotron Chat</h1>
+      <p>Futuristische KI-Oberfläche powered by NVIDIA</p>
+    </header>
+
+    <messages id="messages">
+      <div class="msg assistant welcome">
+        <div class="avatar">&#128169;</div>
+        <div class="bubble">
+          Hallo! Ich bin Nemotron, dein KI-Assistent von NVIDIA. <br><br>
+          Was möchtest du wissen? Du kannst mich alles fragen &#8212; von Programmierung bis zu kreativen Projekten.
+        </div>
+      </div>
+    </messages>
+
+    <input-area>
+      <div class="input-wrapper">
+        <form id="chatForm">
+          <input id="userInput" type="text" placeholder="Nachricht eingeben &#8230;" autocomplete="off" />
+          <button type="submit" class="send" id="sendBtn">&#9654;</button>
+        </form>
+        <div class="input-hints">
+          <span class="hint">&#8987; Enter = Senden</span>
+          <span class="hint">&#8617; Shift+Enter = Zeilenumbruch</span>
+        </div>
+      </div>
+      <div class="status-row">
+        <div class="status" id="status">Bereit</div>
+        <div class="key-warning" id="key-warning">&#128308; Kein API Key konfiguriert &#8212; bitte Secret <code>NVIDIA_API_KEY</code> im Repo hinterlegen.</div>
+      </div>
+    </input-area>
+  </main>
 </app>
 
 <script src="script.js"></script>

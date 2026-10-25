@@ -9,6 +9,7 @@
   --glass: rgba(255, 255, 255, 0.03);
   --success: #22d3ee;
   --error: #f87171;
+  --sidebar-width: 260px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,21 +45,169 @@ body::before {
 }
 
 app {
-  max-width: 900px;
-  margin: 0 auto;
-  height: 100vh;
   display: flex;
-  flex-direction: column;
-  padding: 2rem 1rem;
+  height: 100vh;
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
-header {
+sidebar {
+  width: var(--sidebar-width);
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+.sidebar-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-icon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #000;
+  font-size: 1.1rem;
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+}
+
+.logo-text {
+  font-weight: 800;
+  font-size: 1.1rem;
+  letter-spacing: -0.5px;
+  background: linear-gradient(to right, #fff, var(--accent), #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.95rem;
+}
+
+.nav-item:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+
+.nav-item.active {
+  background: rgba(0, 242, 255, 0.15);
+  color: var(--accent);
+  border-left: 3px solid var(--accent);
+}
+
+.nav-icon { font-size: 1.2rem; }
+
+.sidebar-footer {
+  padding: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sidebar-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.model-select {
+  width: 100%;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.model-select:focus { border-color: var(--accent); }
+
+.sidebar-action button {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sidebar-action button:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--error);
+  animation: pulse 2s infinite;
+}
+
+.status-dot.ok { background: var(--success); }
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.app-header {
   text-align: center;
-  margin-bottom: 1.5rem;
+  padding: 2rem 1rem 1.5rem;
   animation: fadeInDown 0.8s ease;
 }
 
-header h1 {
+.app-header h1 {
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: -0.5px;
@@ -68,7 +217,7 @@ header h1 {
   margin-bottom: 0.5rem;
 }
 
-header p {
+.app-header p {
   color: var(--muted);
   font-size: 0.95rem;
 }
@@ -76,7 +225,7 @@ header p {
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding-right: 0.5rem;
+  padding: 1.5rem 1rem;
   scrollbar-width: thin;
   scrollbar-color: var(--accent-dim) transparent;
   scroll-behavior: smooth;
@@ -88,7 +237,7 @@ header p {
 .msg {
   display: flex;
   gap: 1rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
   animation: slideUp 0.5s ease;
   opacity: 0;
   animation-fill-mode: forwards;
@@ -96,6 +245,8 @@ header p {
 
 .msg.user { flex-direction: row-reverse; }
 .msg.assistant { align-items: flex-start; }
+
+.msg.welcome { animation: none; opacity: 1; }
 
 .avatar {
   width: 36px;
@@ -157,8 +308,13 @@ header p {
 }
 
 input-area {
-  margin-top: 1.5rem;
+  margin-top: auto;
+  padding: 1.5rem 1rem;
   animation: fadeInUp 0.8s ease;
+}
+
+.input-wrapper {
+  position: relative;
 }
 
 form {
@@ -178,7 +334,6 @@ input {
   color: var(--text);
   font-size: 1rem;
   outline: none;
-  resize: none;
 }
 
 input::placeholder { color: var(--muted); }
@@ -201,15 +356,27 @@ button.send:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0, 242, 25
 button.send:active { transform: scale(0.95); }
 button.send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-.status {
+.input-hints {
+  display: flex;
+  gap: 1rem;
   margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.status {
   font-size: 0.8rem;
   color: var(--muted);
-  text-align: center;
 }
 
 .key-warning {
-  margin-top: 0.5rem;
   font-size: 0.8rem;
   color: var(--error);
   text-align: center;
@@ -272,7 +439,15 @@ pre code {
   to { opacity: 1; }
 }
 
-@media (max-width: 600px) {
-  app { padding: 1rem 0.5rem; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (max-width: 768px) {
+  sidebar { position: absolute; z-index: 20; transform: translateX(-100%); transition: transform 0.3s; }
+  sidebar.open { transform: translateX(0); }
+  app { flex-direction: column; }
+  main { max-width: none; }
   .bubble { max-width: 85%; font-size: 0.9rem; }
 }
