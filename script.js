@@ -1,6 +1,6 @@
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
-const PROXY_URL = 'https://dein-proxy.onrender.com/chat';
+const PROXY_URL = 'https://nvidia-nemotron.onrender.com/chat';
 const API_KEY_ATTR = 'data-api-key';
 const STORAGE_KEY = 'nemotron_api_key';
 
