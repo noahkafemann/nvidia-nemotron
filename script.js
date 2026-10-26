@@ -117,11 +117,11 @@ function createTypingBubble() {
 }
 
 async function tryNonStreaming(apiKey, bubble, typingDiv) {
-  const response = await fetch(`${API_BASE}/chat/completions`, {
+  const response = await fetch(PROXY_URL, {
     method: 'POST',
+    mode: 'cors',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: currentModel,
@@ -179,15 +179,48 @@ form.addEventListener('submit', async (e) => {
   scrollToBottom();
   const bubble = typingDiv.querySelector('.bubble');
 
+  const useProxy = PROXY_URL && !PROXY_URL.includes('dein-proxy.onrender.com');
+
+  if (!useProxy) {
+    const apiKey = resolveApiKey();
+    if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
+      showKeyWarning(true);
+      setStatus('Kein API Key', 'error');
+      addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings &#8594; Secrets and variables &#8594; Actions hinzu, oder richte einen Proxy-Server ein.');
+      return;
+    }
+    showKeyWarning(false);
+  }
+
+  input.value = '';
+  sendBtn.disabled = true;
+  setStatus('Verarbeite...');
+
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg assistant';
+  typingDiv.innerHTML = `
+    <div class="avatar">&#128169;</div>
+    <div class="bubble typing"><span class="stream-cursor"></span></div>
+  `;
+  messagesEl.appendChild(typingDiv);
+  scrollToBottom();
+  const bubble = typingDiv.querySelector('.bubble');
+
   try {
     streamController = new AbortController();
 
-    const response = await fetch(`${API_BASE}/chat/completions`, {
+    const fetchUrl = useProxy ? PROXY_URL : `${API_BASE}/chat/completions`;
+    const fetchHeaders = useProxy
+      ? { 'Content-Type': 'application/json' }
+      : { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resolveApiKey()}` };
+
+    const response = await fetch(fetchUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
+      mode: 'cors',
+      headers: fetchHeaders,
       body: JSON.stringify({
         model: currentModel,
         messages: history,
@@ -263,7 +296,7 @@ form.addEventListener('submit', async (e) => {
     try {
       bubble.classList.remove('typing');
       bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen, versuche alternativen Modus...</span>';
-      await tryNonStreaming(apiKey, bubble, typingDiv);
+      await tryNonStreaming(useProxy ? '' : resolveApiKey(), bubble, typingDiv);
     } catch (fallbackErr) {
       bubble.innerHTML = '<span style="color: var(--error); font-weight: bold">Fehler: ' + escapeHtml(fallbackErr.message || err.message) + '</span>';
       bubble.classList.remove('typing');
