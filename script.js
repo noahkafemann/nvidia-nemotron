@@ -1,8 +1,23 @@
+// --- CONFIGURATION ---
 const API_BASE = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
-const PROXY_URL = 'https://nvidia-nemotron.onrender.com/chat';
+const PROXY_URL = 'https://nvidia-nemotron.onrender.com';
 const API_KEY_ATTR = 'data-api-key';
 const STORAGE_KEY = 'nemotron_api_key';
+
+// Settings management
+const settings = {
+  temperature: 0.7,
+  maxTokens: 1024,
+  streaming: true
+};
+
+// Settings management
+const settings = {
+  temperature: 0.7,
+  maxTokens: 1024,
+  streaming: true
+};
 
 const messagesEl = document.getElementById('messages');
 const form = document.getElementById('chatForm');
@@ -322,16 +337,18 @@ async function handleAuth(type) {
     return;
   }
 
+  const endpoint = type === 'login' ? '/auth/login' : '/auth/register';
   try {
-    let result;
-    if (type === 'login') {
-      result = await supabase.auth.signInWithPassword({ email, password });
-    } else {
-      result = await supabase.auth.signUp({ email, password });
-    }
+    const response = await fetch(`${PROXY_URL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
 
-    if (result.error) throw result.error;
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Ein Fehler ist aufgetreten');
     
+    localStorage.setItem('userId', data.userId);
     authOverlay.style.display = 'none';
     document.body.classList.remove('auth-hidden');
     loadUserChats();
@@ -344,14 +361,15 @@ btnLogin.addEventListener('click', () => handleAuth('login'));
 btnRegister.addEventListener('click', () => handleAuth('register'));
 
 async function checkSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
+  const userId = localStorage.getItem('userId');
+  if (userId) {
     authOverlay.style.display = 'none';
     document.body.classList.remove('auth-hidden');
     loadUserChats();
   }
 }
 checkSession();
+
 
 // --- CHAT MANAGEMENT ---
 let currentChatId = null;
