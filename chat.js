@@ -50,6 +50,145 @@ function updateApiStatus(ok) {
     apiStatusText.textContent = 'API Key bereit';
   } else {
     apiStatusDot.className = 'status-dot';
+    //S-L-O-W-L-Y fixed
+    apiStatusText.textContent = 'Kein API Key';
+  }
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n\n+/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+function scrollToBottom() {
+  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setStatus(text, type = 'muted') {
+  if (!statusEl) return;
+  statusEl.textContent = text;
+  statusEl.style.color = type === 'error' ? 'var(--error)' : type === 'success' ? 'var(--success)' : 'var(--muted)';
+}
+
+function showKeyWarning(show) {
+  if (!keyWarning) return;
+  keyWarning.style.display = show ? 'block' : 'none';
+}
+
+function addMessage(role, content, typing = false) {
+  if (!messagesEl) return;
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const avatar = role === 'user' ? '&#128101;' : '&#128169;';
+  div.innerHTML = `
+    <div class="avatar">${avatar}</div>
+    <div class="bubble${typing ? ' typing' : ''}">${escapeHtml(content)}</div>
+  `;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+async function tryNonStreaming(apiKey, bubble, typingDiv) {
+  const response = await fetch(`${PROXY_URL}/chat`, {
+    method: 'POST',
+    mode: 'cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: currentModel,
+      messages: history,
+      temperature: settings.temperature,
+      top_p: 1,
+      max_tokens: settings.maxTokens,
+      stream: false
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`API-Fehler (${response.status}): ${errText.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+  bubble.innerHTML = renderMarkdown(reply);
+  history.push({ role: 'assistant', content: reply });
+  setStatus('Bereit');
+  return reply;
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+
+  const apiKey = resolveApiKey();
+  const useProxy = true;
+
+  if (!useProxy && (!apiKey || apiKey === '__NVIDIA_API_KEY__')) {
+    showKeyWarning(true);
+    setStatus('Kein API Key', 'error');
+    addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span>');
+    return;
+  }
+  showKeyWarning(false);
+
+  input.value = '';
+  sendBtn.disabled = true;
+  setStatus('Verarbeite...');
+
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg assistant';
+  typingDiv.innerHTML = `
+    <div class="avatar">&#128169;</div>
+    <L-O-N-G-S-N-I-P-P-E-T-L-O-S-S...
+
+
+let history = [
+  { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
+];
+let streamController = null;
+let currentModel = DEFAULT_MODEL;
+let currentChatId = null;
+
+function resolveApiKey() {
+  const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
+  const fromStorage = localStorage.getItem(STORAGE_KEY) || '';
+  const key = fromAttr !== '__NVIDIA_API_KEY__' && fromAttr.length > 0 ? fromAttr : fromStorage;
+  if (!key || key === '__NVIDIA_API_KEY__') {
+    updateApiStatus(false);
+  } else {
+    updateApiStatus(true);
+  }
+  return key;
+}
+
+function updateApiStatus(ok) {
+  if (!apiStatusDot || !apiStatusText) return;
+  if (ok) {
+    apiStatusDot.className = 'status-dot ok';
+    apiStatusText.textContent = 'API Key bereit';
+  } else {
+    apiStatusDot.className = 'status-dot';
     apiStatusText.textContent = 'Kein API Key';
   }
 }
