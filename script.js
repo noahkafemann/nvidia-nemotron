@@ -154,43 +154,15 @@ form.addEventListener('submit', async (e) => {
   if (!text) return;
 
   const apiKey = resolveApiKey();
-  if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
+  const useProxy = PROXY_URL && !PROXY_URL.includes('dein-proxy.onrender.com');
+
+  if (!useProxy && (!apiKey || apiKey === '__NVIDIA_API_KEY__')) {
     showKeyWarning(true);
     setStatus('Kein API Key', 'error');
     addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings &#8594; Secrets and variables &#8594; Actions hinzu.');
     return;
   }
   showKeyWarning(false);
-
-  input.value = '';
-  sendBtn.disabled = true;
-  setStatus('Verarbeite...');
-
-  addMessage('user', text);
-  history.push({ role: 'user', content: text });
-
-  const typingDiv = document.createElement('div');
-  typingDiv.className = 'msg assistant';
-  typingDiv.innerHTML = `
-    <div class="avatar">&#128169;</div>
-    <div class="bubble typing"><span class="stream-cursor"></span></div>
-  `;
-  messagesEl.appendChild(typingDiv);
-  scrollToBottom();
-  const bubble = typingDiv.querySelector('.bubble');
-
-  const useProxy = PROXY_URL && !PROXY_URL.includes('dein-proxy.onrender.com');
-
-  if (!useProxy) {
-    const apiKey = resolveApiKey();
-    if (!apiKey || apiKey === '__NVIDIA_API_KEY__') {
-      showKeyWarning(true);
-      setStatus('Kein API Key', 'error');
-      addMessage('assistant', '<span style="color: var(--error); font-weight: bold">Fehler: Kein NVIDIA API Key konfiguriert.</span><br>Bitte füge den Secret <code>NVIDIA_API_KEY</code> im GitHub Repository unter Settings &#8594; Secrets and variables &#8594; Actions hinzu, oder richte einen Proxy-Server ein.');
-      return;
-    }
-    showKeyWarning(false);
-  }
 
   input.value = '';
   sendBtn.disabled = true;
