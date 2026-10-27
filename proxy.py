@@ -29,6 +29,13 @@ def chat():
         return add_cors_headers(resp), 400
 
     try:
+        # Übernahme von stream-Parameter aus dem Request
+        stream_enabled = data.get('stream', False)
+        
+        # Wenn Streaming gewünscht ist, nutzen wir requests.post mit stream=True
+        # Aber Flask benötigt für echtes Streaming eine Response-Klasse wie Response(generate(), ...)
+        # Für eine einfache Lösung stellen wir sicher, dass der Proxy den Stream-Parameter an NVIDIA weitergibt
+        
         response = requests.post(
             f'{API_BASE}/chat/completions',
             headers={
@@ -41,12 +48,25 @@ def chat():
                 'temperature': 0.7,
                 'top_p': data.get('top_p', 1),
                 'max_tokens': data.get('max_tokens', 1024),
-                'stream': False
+                'stream': stream_enabled
             },
-            timeout=60
+            timeout=60,
+            stream=stream_enabled
         )
-        resp = jsonify(response.json())
-        return add_cors_headers(resp), response.status_code
+        
+        if stream_enabled:
+            from flask import Response
+            def generate():
+                for line in response.iter_lines():
+                    if line:
+                        yield line + b'\n'
+            
+            resp = Response(generate(), content_type='text/event-stream')
+            return add_cors_headers(resp)
+        else:
+            resp = jsonify(response.json())
+            return add_cors_headers(resp), response.status_code
+
     except Exception as e:
         resp = jsonify({'error': str(e)})
         return add_cors_headers(resp), 500
