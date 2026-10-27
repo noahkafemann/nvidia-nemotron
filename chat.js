@@ -11,18 +11,283 @@ const settings = {
   streaming: true
 };
 
-const messagesEl = document.getElementById('messages');
-const form = document.getElementById('chatForm');
-const input = document.getElementById('userInput');
-const sendBtn = document.getElementById('sendBtn');
-const statusEl = document.getElementById('status');
-const keyWarning = document.getElementById('key-warning');
-const modelSelect = document.getElementById('modelSelect');
-const clearChatBtn = document.getElementById('clearChatBtn');
-const apiKeyInput = document.getElementById('apiKeyInput');
-const saveKeyBtn = document.getElementById('saveKeyBtn');
-const apiStatusDot = document.querySelector('.status-dot');
-const apiStatusText = document.getElementById('apiStatusText');
+// Global state
+let history = [
+  { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
+];
+let streamController = null;
+let currentModel = DEFAULT_MODEL;
+let currentChatId = null;
+
+// DOM elements cached inside init
+let elements = {};
+
+function init() {
+  elements = {
+    messagesEl: document.getElementById('messages'),
+    form: document.getElementById('chatForm'),
+    input: document.getElementById('userInput'),
+    sendBtn: document.getElementById('sendBtn'),
+    statusEl: document.getElementById('status'),
+    keyWarning: document.getElementById('key-warning'),
+    modelSelect: document.getElementById('modelSelect'),
+    clearChatBtn: document.getElementById('clearChatBtn'),
+    apiKeyInput: document.getElementById('apiKeyInput'),
+    saveKeyBtn: document.getElementById('saveKeyBtn'),
+    apiStatusDot: document.querySelector('.status-dot'),
+    apiStatusText: document.getElementById('apiStatusText'),
+    navChat: document.getElementById('navChat'),
+    navHistory: document.getElementById('navHistory'),
+    navSettings: document.getElementById('navSettings'),
+    chatView: document.getElementById('chatView'),
+    historyView: document.getElementById('historyView'),
+    settingsView: document.getElementById('settingsView')
+  };
+
+  setupViewSwitching();
+  setupToggles();
+  setupChatEvents();
+  setupSidebarEvents();
+  
+  resolveApiKey();
+  loadUserChats();
+}
+
+function setupViewSwitching() {
+  const switchView = (view) => {
+    [elements.chatView, elements.historyView, elements.settingsView].forEach(v => { if(v) v.style.display = 'none'; });
+    [elements.navChat, elements.navHistory, elements.navSettings].forEach(n => { if(n) n.classList.remove('active'); });
+    
+    if (view === 'chat') {
+      if(elements.chatView) elements.chatView.style.display = 'block';
+      if(elements.navChat) elements.navChat.classList.add('active');
+    } else if (view === 'history') {
+      if(elements.historyView) elements.historyView.style.display = 'block';
+      if(elements.navHistory) elements.navHistory.classList.add('active');
+    } else if (view === 'settings') {
+      if(elements.settingsView) elements.settingsView.style.display = 'block';
+      if(elements.navSettings) elements.navSettings.classList.add('active');
+    }
+  };
+
+  if (elements.navChat) elements.navChat.addEventListener('click', () => switchView('chat'));
+  if (elements.navHistory) elements.navHistory.addEventListener('click', () => switchView('history'));
+  if (elements.navSettings) elements.navSettings.addEventListener('click', () => switchView('settings'));
+}
+
+function setupToggles() {
+  const setupToggle = (id, storageKey, className, defaultValue = 'On') => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const saved = localStorage.getItem(storageKey);
+    const currentStatus = saved !== null ? saved : defaultValue;
+    el.textContent = currentStatus;
+    if (className) document.body.classList.toggle(className, currentStatus === 'On');
+    el.addEventListener('click', () => {
+      const newState = el.textContent === 'On' ? 'Off' : 'On';
+      el.textContent = newState;
+      localStorage.setItem(storageKey, newState);
+      if (className) document.body.classList.toggle(className, newState === 'On');
+    });
+  };
+
+  setupToggle('compactToggle', 'nemotron_compact_mode', 'compact-mode', 'Off');
+  setupToggle('darkModeToggle', 'nemotron_dark_mode', 'dark-mode', 'On');
+  setupToggle('streamToggle', 'nemotron_streaming', '', 'On');
+}
+
+function setupChatEvents() {
+  if (!elements.form) return;
+
+  elements.form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = elements.input.value.trim();
+    if (!text) return;
+
+    const apiKey = resolveApiKey();
+    if (elements.keyWarning) elements.keyWarning.style.display = 'none';
+
+    elements.input.value = '';
+    if(elements.sendBtn) elements.sendBtn.disabled = true;
+    setStatus('Verarbeite...');
+
+    addMessage('user', text);
+    history.push({ role: 'user', content: text });
+
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'msg assistant';
+    typingDiv.innerHTML = `<div class="avatar">&#128169;</div><div class="bubble typing"><span class="stream-cursor"></span></div>`;
+    elements.messagesEl.appendChild(typingDiv);
+    scrollToBottom();
+    const bubble = typingDiv.querySelector('.bubble');
+
+    try {
+      streamController = new AbortController();
+      const response = await fetch(`${PROXY_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: currentModel,
+          messages: history,
+          temperature: settings.temperature,
+          max_tokens: settings.maxTokens,
+          stream: settings.streaming
+        }),
+        signal: streamController.signal
+      });
+
+      if (!response.ok) throw new Error(`API-Fehler: ${response.status}`);
+      if (!response.body) throw new Error('Keine Antwort');
+
+      bubble.classList.remove('typing');
+      let fullReply = '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              fullReply += delta;
+              bubble.innerHTML = renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
+              scrollToBottom();
+            }
+          } catch (err) {}
+        }
+      }
+      bubble.innerHTML = renderMarkdown(fullReply || 'Keine Antwort erhalten.');
+      history.push({ role: 'assistant', content: fullReply });
+      setStatus('Bereit');
+    } catch (err) {
+      bubble.innerHTML = `<span style="color: var(--error)">Fehler: ${escapeHtml(err.message)}</span>`;
+      bubble.classList.remove('typing');
+      setStatus('Fehler', 'error');
+    } finally {
+      scrollToBottom();
+      if(elements.sendBtn) elements.sendBtn.disabled = false;
+      streamController = null;
+    }
+  });
+
+  if (elements.input) {
+    elements.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        elements.form.requestSubmit();
+      }
+    });
+  }
+}
+
+function setupSidebarEvents() {
+  if (elements.modelSelect) {
+    elements.modelSelect.addEventListener('change', (e) => { currentModel = e.target.value; });
+  }
+  if (elements.clearChatBtn) {
+    elements.clearChatBtn.addEventListener('click', () => {
+      elements.messagesEl.innerHTML = '';
+      history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+      addMessage('assistant', 'Chat geleert.');
+    });
+  }
+  if (elements.saveKeyBtn) {
+    elements.saveKeyBtn.addEventListener('click', () => {
+      const key = elements.apiKeyInput.value.trim();
+      localStorage.setItem(STORAGE_KEY, key);
+      resolveApiKey();
+      alert('API Key gespeichert!');
+    });
+  }
+}
+
+function resolveApiKey() {
+  const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
+  const fromStorage = localStorage.getItem(STORAGE_KEY) || '';
+  const key = fromAttr !== '__NVIDIA_API_KEY__' && fromAttr.length > 0 ? fromAttr : fromStorage;
+  updateApiStatus(!!key && key !== '__NVIDIA_API_KEY__');
+  return key;
+}
+
+function updateApiStatus(ok) {
+  if (!elements.apiStatusDot || !elements.apiStatusText) return;
+  elements.apiStatusDot.className = ok ? 'status-dot ok' : 'status-dot';
+  elements.apiStatusText.textContent = ok ? 'API Key bereit' : 'Kein API Key';
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderMarkdown(text) {
+  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+}
+
+function scrollToBottom() {
+  if (elements.messagesEl) elements.messagesEl.scrollTop = elements.messagesEl.scrollHeight;
+}
+
+function setStatus(text, type = 'muted') {
+  if (!elements.statusEl) return;
+  elements.statusEl.textContent = text;
+  elements.statusEl.style.color = type === 'error' ? 'var(--error)' : 'var(--success)';
+}
+
+function addMessage(role, content) {
+  if (!elements.messagesEl) return;
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `<div class="avatar">${role==='user'?'&#128101;':'&#128169;'}</div><div class="bubble">${escapeHtml(content)}</div>`;
+  elements.messagesEl.appendChild(div);
+  scrollToBottom();
+}
+
+async function loadUserChats() {
+  const userId = localStorage.getItem('userId');
+  if (!userId) return;
+  try {
+    const response = await fetch(`${PROXY_URL}/chats`, { headers: { 'Authorization': userId } });
+    const chats = await response.json();
+    const chatListEl = document.getElementById('chatList');
+    if (chatListEl) {
+      document.getElementById('chatListContainer').style.display = 'flex';
+      chatListEl.innerHTML = '';
+      chats.forEach(chat => {
+        const div = document.createElement('div');
+        div.className = 'chat-item';
+        div.textContent = chat.title || 'Neuer Chat';
+        div.onclick = () => selectChat(chat.id, chat.title);
+        chatListEl.appendChild(div);
+      });
+    }
+  } catch (e) {}
+}
+
+async function selectChat(id, title) {
+  try {
+    const response = await fetch(`${PROXY_URL}/chats/${id}/messages`, {
+      headers: { 'Authorization': localStorage.getItem('userId') }
+    });
+    const messages = await response.json();
+    elements.messagesEl.innerHTML = '';
+    messages.forEach(m => addMessage(m.role, m.content));
+  } catch (e) {}
+}
+
+window.addEventListener('DOMContentLoaded', init);
 
 // View Elements
 const navChat = document.getElementById('navChat');
