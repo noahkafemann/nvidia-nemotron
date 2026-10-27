@@ -12,13 +12,6 @@ const settings = {
   streaming: true
 };
 
-// Settings management
-const settings = {
-  temperature: 0.7,
-  maxTokens: 1024,
-  streaming: true
-};
-
 const messagesEl = document.getElementById('messages');
 const form = document.getElementById('chatForm');
 const input = document.getElementById('userInput');
