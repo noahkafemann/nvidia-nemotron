@@ -24,6 +24,342 @@ const saveKeyBtn = document.getElementById('saveKeyBtn');
 const apiStatusDot = document.querySelector('.status-dot');
 const apiStatusText = document.getElementById('apiStatusText');
 
+// View Elements
+const navChat = document.getElementById('navChat');
+const navHistory = document.getElementById('navHistory');
+const navSettings = document.getElementById('navSettings');
+const chatView = document.getElementById('chatView');
+const historyView = document.getElementById('historyView');
+const settingsView = document.getElementById('settingsView');
+
+let history = [
+  { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
+];
+let streamController = null;
+let currentModel = DEFAULT_MODEL;
+let currentChatId = null;
+
+// --- VIEW SWITCHING ---
+function switchView(view) {
+  [chatView, historyView, settingsView].forEach(v => { if(v) v.style.display = 'none'; });
+  [navChat, navHistory, navSettings].forEach(n => { if(n) n.classList.remove('active'); });
+  
+  if (view === 'chat') {
+    if(chatView) chatView.style.display = 'block';
+    if(navChat) navChat.classList.add('active');
+  } else if (view === 'history') {
+    if(historyView) historyView.style.display = 'block';
+    if(navHistory) navHistory.classList.add('active');
+  } else if (view === 'settings') {
+    if(settingsView) settingsView.style.display = 'block';
+    if(navSettings) navSettings.classList.add('active');
+  }
+}
+
+if (navChat) navChat.addEventListener('click', () => switchView('chat'));
+if (navHistory) navHistory.addEventListener('click', () => switchView('history'));
+if (navSettings) navSettings.addEventListener('click', () => switchView('settings'));
+
+// --- SETTINGS LOGIC ---
+function setupToggle(id, storageKey, className, defaultValue = 'On') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const saved = localStorage.getItem(storageKey);
+  const currentStatus = saved !== null ? saved : defaultValue;
+  el.textContent = currentStatus;
+  if (className) document.body.classList.toggle(className, currentStatus === 'On');
+  el.addEventListener('click', () => {
+    const newState = el.textContent === 'On' ? 'Off' : 'On';
+    el.textContent = newState;
+    localStorage.setItem(storageKey, newState);
+    if (className) document.body.classList.toggle(className, newState === 'On');
+  });
+}
+
+setupToggle('compactToggle', 'nemotron_compact_mode', 'compact-mode', 'Off');
+setupToggle('darkModeToggle', 'nemotron_dark_mode', 'dark-mode', 'On');
+setupToggle('streamToggle', 'nemotron_streaming', '', 'On');
+
+// --- CORE CHAT LOGIC ---
+function resolveApiKey() {
+  const fromAttr = document.documentElement.getAttribute(API_KEY_ATTR) || '';
+  const fromStorage = localStorage.getItem(STORAGE_KEY) || '';
+  const key = fromAttr !== '__NVIDIA_API_KEY__' && fromAttr.length > 0 ? fromAttr : fromStorage;
+  updateApiStatus(!!key && key !== '__NVIDIA_API_KEY__');
+  return key;
+}
+
+function updateApiStatus(ok) {
+  if (!apiStatusDot || !apiStatusText) return;
+  apiStatusDot.className = ok ? 'status-dot ok' : 'status-dot';
+  apiStatusText.textContent = ok ? 'API Key bereit' : 'Kein API Key';
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n\n+/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+function scrollToBottom() {
+  if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function setStatus(text, type = 'muted') {
+  if (!statusEl) return;
+  statusEl.textContent = text;
+  statusEl.style.color = type === 'error' ? 'var(--error)' : type === 'success' ? 'var(--success)' : 'var(--muted)';
+}
+
+function showKeyWarning(show) {
+  if (!keyWarning) return;
+  keyWarning.style.display = show ? 'block' : 'none';
+}
+
+function addMessage(role, content, typing = false) {
+  if (!messagesEl) return;
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  const avatar = role === 'user' ? '&#128101;' : '&#128169;';
+  div.innerHTML = `
+    <div class="avatar">${avatar}</div>
+    <div class="bubble${typing ? ' typing' : ''}">${escapeHtml(content)}</div>
+  `;
+  messagesEl.appendChild(div);
+  scrollToBottom();
+  return div;
+}
+
+async function tryNonStreaming(apiKey, bubble, typingDiv) {
+  const response = await fetch(`${PROXY_URL}/chat`, {
+    method: 'POST',
+    mode: 'cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: currentModel,
+      messages: history,
+      temperature: settings.temperature,
+      top_p: 1,
+      max_tokens: settings.maxTokens,
+      stream: false
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`API-Fehler (${response.status}): ${errText.substring(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const reply = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+  bubble.innerHTML = renderMarkdown(reply);
+  history.push({ role: 'assistant', content: reply });
+  setStatus('Bereit');
+  return reply;
+}
+
+if (form) {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+
+    const apiKey = resolveApiKey();
+    showKeyWarning(false);
+
+    input.value = '';
+    if(sendBtn) sendBtn.disabled = true;
+    setStatus('Verarbeite...');
+
+    addMessage('user', text);
+    history.push({ role: 'user', content: text });
+
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'msg assistant';
+    typingDiv.innerHTML = `
+      <div class="avatar">&#128169;</div>
+      <div class="bubble typing"><span class="stream-cursor"></span></div>
+    `;
+    messagesEl.appendChild(typingDiv);
+    scrollToBottom();
+    const bubble = typingDiv.querySelector('.bubble');
+
+    try {
+      streamController = new AbortController();
+      const response = await fetch(`${PROXY_URL}/chat`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: currentModel,
+          messages: history,
+          temperature: settings.temperature,
+          top_p: 1,
+          max_tokens: settings.maxTokens,
+          stream: settings.streaming
+        }),
+        signal: streamController.signal
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        bubble.innerHTML = '<span style="color: var(--muted)">Streaming fehlgeschlagen...</span>';
+        await tryNonStreaming(apiKey, bubble, typingDiv);
+        return;
+      }
+      if (!response.body) throw new Error('Keine Antwort vom Server');
+
+      bubble.classList.remove('typing');
+      let fullReply = '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(data);
+            const delta = parsed.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              fullReply += delta;
+              bubble.innerHTML = renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
+              scrollToBottom();
+            }
+          } catch (err) {}
+        }
+      }
+
+      bubble.innerHTML = renderMarkdown(fullReply || 'Keine Antwort erhalten.');
+      history.push({ role: 'assistant', content: fullReply });
+      setStatus('Bereit');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        setStatus('Abgebrochen');
+        return;
+      }
+      bubble.innerHTML = '<span style="color: var(--error); font-weight: bold">Fehler: ' + escapeHtml(err.message) + '</span>';
+      bubble.classList.remove('typing');
+      setStatus('Fehler aufgetreten', 'error');
+    } finally {
+      scrollToBottom();
+      if(sendBtn) sendBtn.disabled = false;
+      streamController = null;
+    }
+  });
+}
+
+if (input) {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if(form) form.requestSubmit();
+    }
+  });
+}
+
+if (modelSelect) {
+  modelSelect.addEventListener('change', (e) => {
+    currentModel = e.target.value;
+  });
+}
+
+if (clearChatBtn) {
+  clearChatBtn.addEventListener('click', () => {
+    if(messagesEl) messagesEl.innerHTML = '';
+    history = [
+      { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
+    ];
+    addMessage('assistant', 'Chat geleert. Wie kann ich dir helfen?');
+  });
+}
+
+// API Key Save
+if (saveKeyBtn) {
+  saveKeyBtn.addEventListener('click', () => {
+    const key = apiKeyInput.value.trim();
+    localStorage.setItem(STORAGE_KEY, key);
+    resolveApiKey();
+    alert('API Key gespeichert!');
+  });
+}
+
+// --- AUTH & CHATS ---
+async function loadUserChats() {
+  const userId = localStorage.getItem('userId');
+  if (!userId) return;
+
+  try {
+    const response = await fetch(`${PROXY_URL}/chats`, {
+      headers: { 'Authorization': userId }
+    });
+    const chats = await response.json();
+
+    const chatListEl = document.getElementById('chatList');
+    const container = document.getElementById('chatListContainer');
+    if (container) container.style.display = 'flex';
+    if (!chatListEl) return;
+    chatListEl.innerHTML = '';
+
+    chats.forEach(chat => {
+      const div = document.createElement('div');
+      div.className = 'chat-item';
+      div.textContent = chat.title || 'Neuer Chat';
+      div.onclick = () => selectChat(chat.id, chat.title);
+      chatListEl.appendChild(div);
+    });
+  } catch (err) {
+    console.error('Error loading chats:', err);
+  }
+}
+
+async function selectChat(id, title) {
+  currentChatId = id;
+  document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+  
+  try {
+    const response = await fetch(`${PROXY_URL}/chats/${id}/messages`, {
+      headers: { 'Authorization': localStorage.getItem('userId') }
+    });
+    const messages = await response.json();
+
+    if(messagesEl) messagesEl.innerHTML = '';
+    messages.forEach(m => addMessage(m.role, m.content));
+    setStatus('Chat geladen');
+  } catch (err) {
+    console.error('Error selecting chat:', err);
+  }
+}
+
+// Initialize
+window.addEventListener('DOMContentLoaded', () => {
+  resolveApiKey();
+  loadUserChats();
+});
+
 let history = [
   { role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }
 ];
