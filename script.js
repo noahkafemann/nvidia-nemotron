@@ -62,11 +62,14 @@ function renderMarkdown(text) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\n\n+/g, '<br><br>')
-    .replace(/\n/g, '<br>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+    .replace(/\n/g, '<br>');
 }
 
 function scrollToBottom() {
@@ -306,15 +309,19 @@ const views = {
 
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
-    const label = item.querySelector('.nav-label').textContent.toLowerCase();
+    const label = item.querySelector('.nav-label').textContent.trim().toLowerCase();
     const viewKey = label === 'chat' ? 'chat' : label === 'verlauf' ? 'history' : 'settings';
     
+    if (!views[viewKey]) return;
+
     // Update active class
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
     
     // Switch view
-    Object.values(views).forEach(v => v.style.display = 'none');
+    Object.values(views).forEach(v => {
+      if (v) v.style.display = 'none';
+    });
     views[viewKey].style.display = 'flex';
   });
 });
