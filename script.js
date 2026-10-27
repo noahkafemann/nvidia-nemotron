@@ -324,16 +324,34 @@ document.querySelectorAll('.nav-item').forEach(item => {
   });
 });
 
-// Settings Logic
-const compactToggle = document.getElementById('compactToggle');
-if (compactToggle) {
-  compactToggle.addEventListener('click', () => {
-    const isOn = compactToggle.textContent === 'Off';
-    compactToggle.textContent = isOn ? 'On' : 'Off';
-    document.body.classList.toggle('compact-mode', isOn);
-    localStorage.setItem('nemotron_compact_mode', isOn);
+// Generic Toggle Function
+function setupToggle(id, storageKey, className, defaultValue = 'On') {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const saved = localStorage.getItem(storageKey);
+  const currentStatus = saved !== null ? saved : defaultValue;
+  el.textContent = currentStatus;
+
+  if (className) {
+    document.body.classList.toggle(className, currentStatus === 'On');
+  }
+
+  el.addEventListener('click', () => {
+    const newState = el.textContent === 'On' ? 'Off' : 'On';
+    el.textContent = newState;
+    localStorage.setItem(storageKey, newState);
+    if (className) {
+      document.body.classList.toggle(className, newState === 'On');
+    }
   });
 }
+
+// Initialize all settings
+setupToggle('compactToggle', 'nemotron_compact_mode', 'compact-mode', 'Off');
+setupToggle('darkModeToggle', 'nemotron_dark_mode', 'dark-mode', 'On');
+setupToggle('streamToggle', 'nemotron_streaming', '', 'On');
+
 
 // Load saved settings
 if (localStorage.getItem('nemotron_compact_mode') === 'true') {
