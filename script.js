@@ -314,17 +314,32 @@ document.querySelectorAll('.nav-item').forEach(item => {
     
     if (!views[viewKey]) return;
 
-    // Update active class
     document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
     item.classList.add('active');
     
-    // Switch view
     Object.values(views).forEach(v => {
       if (v) v.style.display = 'none';
     });
     views[viewKey].style.display = 'flex';
   });
 });
+
+// Settings Logic
+const compactToggle = document.getElementById('compactToggle');
+if (compactToggle) {
+  compactToggle.addEventListener('click', () => {
+    const isOn = compactToggle.textContent === 'Off';
+    compactToggle.textContent = isOn ? 'On' : 'Off';
+    document.body.classList.toggle('compact-mode', isOn);
+    localStorage.setItem('nemotron_compact_mode', isOn);
+  });
+}
+
+// Load saved settings
+if (localStorage.getItem('nemotron_compact_mode') === 'true') {
+  document.body.classList.add('compact-mode');
+  if (compactToggle) compactToggle.textContent = 'On';
+}
 
 // Lade gespeicherten Key ins Inputfeld
 if (apiKeyInput) {

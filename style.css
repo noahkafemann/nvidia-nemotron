@@ -544,3 +544,11 @@ pre code {
   text-transform: uppercase;
 }
 
+
+/* Compact Mode Styles 
+body.compact-mode .bubble { padding: 0.5rem 0.8rem; font-size: 0.9rem; line-height: 1.4; }
+body.compact-mode .msg { margin-bottom: 0.75rem; }
+body.compact-mode .app-header { padding: 1rem 1rem 0.75rem; }
+body.compact-mode .app-header h1 { font-size: 1.5rem; }
+body.compact-mode .app-header p { font-size: 0.85rem; }
+body.compact-mode .avatar { width: 28px; height: 28px; font-size: 1rem; }
