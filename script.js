@@ -297,8 +297,27 @@ clearChatBtn.addEventListener('click', () => {
   clearChat();
 });
 
-// Init
-resolveApiKey();
+// View Switching Logic
+const views = {
+  chat: document.getElementById('chatView'),
+  history: document.getElementById('historyView'),
+  settings: document.getElementById('settingsView')
+};
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const label = item.querySelector('.nav-label').textContent.toLowerCase();
+    const viewKey = label === 'chat' ? 'chat' : label === 'verlauf' ? 'history' : 'settings';
+    
+    // Update active class
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    
+    // Switch view
+    Object.values(views).forEach(v => v.style.display = 'none');
+    views[viewKey].style.display = 'flex';
+  });
+});
 
 // Lade gespeicherten Key ins Inputfeld
 if (apiKeyInput) {

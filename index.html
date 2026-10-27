@@ -63,38 +63,70 @@
     </div>
   </sidebar>
 
-  <main>
-    <header class="app-header">
-      <h1>Nemotron Chat</h1>
-      <p>Futuristische KI-Oberfläche powered by NVIDIA</p>
-    </header>
+  <main id="mainContent">
+    <div id="chatView">
+      <header class="app-header">
+        <h1>Nemotron Chat</h1>
+        <p>Futuristische KI-Oberfläche powered by NVIDIA</p>
+      </header>
 
-    <messages id="messages">
-      <div class="msg assistant welcome">
-        <div class="avatar">&#128169;</div>
-        <div class="bubble">
-          Hallo! Ich bin Nemotron, dein KI-Assistent von NVIDIA. <br><br>
-          Was möchtest du wissen? Du kannst mich alles fragen &#8212; von Programmierung bis zu kreativen Projekten.
+      <messages id="messages">
+        <div class="msg assistant welcome">
+          <div class="avatar">&#128169;</div>
+          <div class="bubble">
+            Hallo! Ich bin Nemotron, dein KI-Assistent von NVIDIA. <br><br>
+            Was möchtest du wissen? Du kannst mich alles fragen &#8212; von Programmierung bis zu kreativen Projekten.
+          </div>
+        </div>
+      </messages>
+
+      <input-area>
+        <div class="input-wrapper">
+          <form id="chatForm">
+            <input id="userInput" type="text" placeholder="Nachricht eingeben &#8230;" autocomplete="off" />
+            <button type="submit" class="send" id="sendBtn">&#9654;</button>
+          </form>
+          <div class="input-hints">
+            <span class="hint">&#8987; Enter = Senden</span>
+            <span class="hint">&#8617; Shift+Enter = Zeilenumbruch</span>
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="status" id="status">Bereit</div>
+          <div class="key-warning" id="key-warning">&#128308; Kein API Key konfiguriert &#8212; bitte Secret <code>NVIDIA_API_KEY</code> im Repo hinterlegen.</div>
+        </div>
+      </input-area>
+    </div>
+
+    <div id="historyView" class="view-panel" style="display: none;">
+      <header class="app-header">
+        <h1>Chat-Verlauf</h1>
+        <p>Deine letzten Konversationen</p>
+      </header>
+      <div class="panel-content">
+        <div class="empty-state">Noch kein Verlauf vorhanden.</div>
+      </div>
+    </div>
+
+    <div id="settingsView" class="view-panel" style="display: none;">
+      <header class="app-header">
+        <h1>Einstellungen</h1>
+        <p>Konfiguriere dein Nemotron Erlebnis</p>
+      </header>
+      <div class="panel-content">
+        <div class="settings-group">
+          <label class="sidebar-label">Interface</label>
+          <div class="setting-item">
+            <span>Dark Mode</span>
+            <div class="toggle">On</div>
+          </div>
+          <div class="setting-item">
+            <span>Streaming Antworten</span>
+            <div class="toggle">On</div>
+          </div>
         </div>
       </div>
-    </messages>
-
-    <input-area>
-      <div class="input-wrapper">
-        <form id="chatForm">
-          <input id="userInput" type="text" placeholder="Nachricht eingeben &#8230;" autocomplete="off" />
-          <button type="submit" class="send" id="sendBtn">&#9654;</button>
-        </form>
-        <div class="input-hints">
-          <span class="hint">&#8987; Enter = Senden</span>
-          <span class="hint">&#8617; Shift+Enter = Zeilenumbruch</span>
-        </div>
-      </div>
-      <div class="status-row">
-        <div class="status" id="status">Bereit</div>
-        <div class="key-warning" id="key-warning">&#128308; Kein API Key konfiguriert &#8212; bitte Secret <code>NVIDIA_API_KEY</code> im Repo hinterlegen.</div>
-      </div>
-    </input-area>
+    </div>
   </main>
 </app>
 
