@@ -129,9 +129,9 @@ async function tryNonStreaming(apiKey, bubble, typingDiv) {
     body: JSON.stringify({
       model: currentModel,
       messages: history,
-      temperature: 0.7,
+      temperature: settings.temperature,
       top_p: 1,
-      max_tokens: 1024,
+      max_tokens: settings.maxTokens,
       stream: false
     })
   });
@@ -199,10 +199,10 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify({
         model: currentModel,
         messages: history,
-        temperature: 0.7,
+        temperature: settings.temperature,
         top_p: 1,
-        max_tokens: 1024,
-        stream: true
+        max_tokens: settings.maxTokens,
+        stream: settings.streaming
       }),
       signal: streamController.signal
     });
@@ -347,10 +347,54 @@ function setupToggle(id, storageKey, className, defaultValue = 'On') {
   });
 }
 
+// Settings Management
+const settings = {
+  temperature: 0.7,
+  maxTokens: 1024,
+  streaming: true
+};
+
+function loadSettings() {
+  const savedTemp = localStorage.getItem('nemotron_temp');
+  const savedTokens = localStorage.getItem('nemotron_tokens');
+  const savedStream = localStorage.getItem('nemotron_streaming');
+
+  if (savedTemp) settings.temperature = parseFloat(savedTemp);
+  if (savedTokens) settings.maxTokens = parseInt(savedTokens);
+  if (savedStream) settings.streaming = savedStream === 'On';
+
+  // Update UI inputs
+  const tempIn = document.getElementById('tempInput');
+  const tokIn = document.getElementById('tokensInput');
+  if (tempIn) tempIn.value = settings.temperature;
+  if (tokIn) tokIn.value = settings.maxTokens;
+}
+
+function initSettingsListeners() {
+  const tempIn = document.getElementById('tempInput');
+  const tokIn = document.getElementById('tokensInput');
+
+  if (tempIn) {
+    tempIn.addEventListener('input', (e) => {
+      settings.temperature = parseFloat(e.target.value);
+      localStorage.setItem('nemotron_temp', settings.temperature);
+    });
+  }
+  if (tokIn) {
+    tokIn.addEventListener('change', (e) => {
+      settings.maxTokens = parseInt(e.target.value);
+      localStorage.setItem('nemotron_tokens', settings.maxTokens);
+    });
+  }
+}
+
 // Initialize all settings
 setupToggle('compactToggle', 'nemotron_compact_mode', 'compact-mode', 'Off');
 setupToggle('darkModeToggle', 'nemotron_dark_mode', 'dark-mode', 'On');
 setupToggle('streamToggle', 'nemotron_streaming', '', 'On');
+
+loadSettings();
+initSettingsListeners();
 
 
 // Load saved settings
