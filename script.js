@@ -349,9 +349,7 @@ async function handleAuth(type) {
     if (!response.ok) throw new Error(data.error || 'Ein Fehler ist aufgetreten');
     
     localStorage.setItem('userId', data.userId);
-    authOverlay.style.display = 'none';
-    document.body.classList.remove('auth-hidden');
-    loadUserChats();
+    window.location.href = 'chat.html';
   } catch (err) {
     authError.textContent = err.message;
   }

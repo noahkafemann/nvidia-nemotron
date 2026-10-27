@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nemotron Chat</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <app>
+    <sidebar>
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">N</div>
+          <div class="logo-text">Nemotron</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-item active" id="navChat">
+          <span class="nav-icon">&#128172;</span>
+          <span class="nav-label">Chat</span>
+        </div>
+        <div class="nav-item" id="navHistory">
+          <span class="nav-icon">&#128196;</span>
+          <span class="nav-label">Verlauf</span>
+        </div>
+        <div class="nav-item" id="navSettings">
+          <span class="nav-icon">&#128106;</span>
+          <span class="nav-label">Einstellungen</span>
+        </div>
+      </nav>
+
+      <div id="chatListContainer" class="chat-list-container" style="display: none;">
+        <div class="chat-list-header">Gespeicherte Chats</div>
+        <div id="chatList" class="chat-list"></div>
+        <button id="newChatBtn" class="btn-new-chat">+ Neuer Chat</button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="model-selector">
+          <label class="sidebar-label">Modell</label>
+          <select id="modelSelect" class="model-select">
+            <option value="nvidia/nemotron-3-ultra-550b-a55b">Nemotron 3 Ultra 550B</option>
+            <option value="nvidia/llama-3.1-nemotron-70b-instruct">Llama 3.1 Nemotron 70B</option>
+            <option value="nvidia/nemotron-4-340b-instruct">Nemotron 4 340B</option>
+          </select>
+        </div>
+
+        <div class="sidebar-action">
+          <button id="clearChatBtn" class="btn-clear">&#128465; Chat leeren</button>
+        </div>
+
+        <div class="sidebar-key">
+          <label class="sidebar-label">API Key</label>
+          <div class="key-input-group">
+            <input id="apiKeyInput" type="password" placeholder="sk-..." autocomplete="off" />
+            <button id="saveKeyBtn" class="btn-save-key">Speichern</button>
+          </div>
+          <div class="key-hint">Wird nur lokal im Browser gespeichert</div>
+        </div>
+
+        <div class="status-indicator" id="apiStatus">
+          <span class="status-dot"></span>
+          <span id="apiStatusText">Prüfe Key...</span>
+        </div>
+      </div>
+    </sidebar>
+
+    <main id="mainContent">
+      <div id="chatView">
+        <header class="app-header">
+          <h1>Nemotron Chat</h1>
+          <p>Futuristische KI-Oberfläche powered by NVIDIA</p>
+        </header>
+
+        <messages id="messages">
+          <div class="msg assistant welcome">
+            <div class="avatar">&#128169;</div>
+            <div class="bubble">
+              Hallo! Ich bin Nemotron, dein KI-Assistent von NVIDIA. <br><br>
+              Was möchtest du wissen? Du kannst mich alles fragen &#8212; von Programmierung bis zu kreativen Projekten.
+            </div>
+          </div>
+        </messages>
+
+        <input-area>
+          <div class="input-wrapper">
+            <form id="chatForm">
+              <input id="userInput" type="text" placeholder="Nachricht eingeben &#8230;" autocomplete="off" />
+              <button type="submit" class="send" id="sendBtn">&#9654;</button>
+            </form>
+            <div class="input-hints">
+              <span class="hint">&#8987; Enter = Senden</span>
+              <span class="hint">&#8617; Shift+Enter = Zeilenumbruch</span>
+            </div>
+          </div>
+          <div class="status-row">
+            <div class="status" id="status">Bereit</div>
+            <div class="key-warning" id="key-warning">&#128308; Kein API Key konfiguriert &#8212; bitte Secret <code>NVIDIA_API_KEY</code> im Repo hinterlegen.</div>
+          </div>
+        </input-area>
+      </div>
+
+      <div id="historyView" class="view-panel" style="display: none;">
+        <header class="app-header">
+          <h1>Chat-Verlauf</h1>
+          <p>Deine letzten Konversationen</p>
+        </header>
+        <div class="panel-content">
+          <div class="empty-state">Noch kein Verlauf vorhanden.</div>
+        </div>
+      </div>
+
+      <div id="settingsView" class="view-panel" style="display: none;">
+        <header class="app-header">
+          <h1>Einstellungen</h1>
+          <p>Konfiguriere dein Nemotron Erlebnis</p>
+        </header>
+        <div class="panel-content">
+          <div class="settings-group">
+            <label class="sidebar-label">Interface</label>
+            <div class="setting-item">
+              <span>Dark Mode</span>
+              <div id="darkModeToggle" class="toggle">On</div>
+            </div>
+            <div class="setting-item">
+              <span>Streaming Antworten</span>
+              <div id="streamToggle" class="toggle">On</div>
+            </div>
+            <div class="setting-item">
+              <span>Kompakte Ansicht</span>
+              <div id="compactToggle" class="toggle">Off</div>
+            </div>
+          </div>
+
+          <div class="settings-group" style="margin-top: 2rem;">
+            <label class="sidebar-label">KI Konfiguration</label>
+            <div class="setting-item">
+              <span>Temperatur (Kreativität)</span>
+              <input id="tempInput" type="range" min="0" max="1" step="0.1" value="0.7" style="width: 100px; accent-color: var(--accent);">
+            </div>
+            <div class="setting-item">
+              <span>Max Tokens</span>
+              <input id="tokensInput" type="number" value="1024" style="width: 60px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); color: white; padding: 2px 5px; border-radius: 4px;">
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </app>
+  <script src="script.js"></script>
+</body>
+</html>
