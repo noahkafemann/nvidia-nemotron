@@ -5,8 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nemotron Chat</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body>
+<body class="auth-hidden">
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-box">
+    <div class="auth-header">
+      <div class="logo-icon">N</div>
+      <h2>Willkommen bei Nemotron</h2>
+      <p>Melde dich an, um deine Chats zu speichern</p>
+    </div>
+    <div class="auth-form">
+      <input type="email" id="authEmail" placeholder="E-Mail Adresse" autocomplete="off">
+      <input type="password" id="authPassword" placeholder="Passwort" autocomplete="off">
+      <div class="auth-buttons">
+        <button id="btnLogin" class="btn-primary">Einloggen</button>
+        <button id="btnRegister" class="btn-secondary">Registrieren</button>
+      </div>
+      <div id="authError" class="auth-error"></div>
+    </div>
+  </div>
+</div>
 <div class="grid-bg"></div>
 
 <app>
@@ -19,19 +38,25 @@
     </div>
 
     <nav class="sidebar-nav">
-      <div class="nav-item active">
+      <div class="nav-item active" id="navChat">
         <span class="nav-icon">&#128172;</span>
         <span class="nav-label">Chat</span>
       </div>
-      <div class="nav-item">
+      <div class="nav-item" id="navHistory">
         <span class="nav-icon">&#128196;</span>
         <span class="nav-label">Verlauf</span>
       </div>
-      <div class="nav-item">
+      <div class="nav-item" id="navSettings">
         <span class="nav-icon">&#128106;</span>
         <span class="nav-label">Einstellungen</span>
       </div>
     </nav>
+
+    <div id="chatListContainer" class="chat-list-container" style="display: none;">
+      <div class="chat-list-header">Gespeicherte Chats</div>
+      <div id="chatList" class="chat-list"></div>
+      <button id="newChatBtn" class="btn-new-chat">+ Neuer Chat</button>
+    </div>
 
     <div class="sidebar-footer">
       <div class="model-selector">

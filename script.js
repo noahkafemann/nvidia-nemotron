@@ -300,101 +300,121 @@ clearChatBtn.addEventListener('click', () => {
   clearChat();
 });
 
-// View Switching Logic
-const views = {
-  chat: document.getElementById('chatView'),
-  history: document.getElementById('historyView'),
-  settings: document.getElementById('settingsView')
-};
+// --- CONFIGURATION ---
+// BITTE ERSETZE DIESE WERTE MIT DEINEN SUPABASE CREDENTIALS!
+const SUPABASE_URL = 'https://your-project-url.supabase.co';
+const SUPABASE_KEY = 'your-anon-key';
+const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    const label = item.querySelector('.nav-label').textContent.trim().toLowerCase();
-    const viewKey = label === 'chat' ? 'chat' : label === 'verlauf' ? 'history' : 'settings';
-    
-    if (!views[viewKey]) return;
+// --- AUTHENTICATION ---
+const authOverlay = document.getElementById('authOverlay');
+const btnLogin = document.getElementById('btnLogin');
+const btnRegister = document.getElementById('btnRegister');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authError = document.getElementById('authError');
 
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    item.classList.add('active');
-    
-    Object.values(views).forEach(v => {
-      if (v) v.style.display = 'none';
-    });
-    views[viewKey].style.display = 'flex';
-  });
-});
-
-// Generic Toggle Function
-function setupToggle(id, storageKey, className, defaultValue = 'On') {
-  const el = document.getElementById(id);
-  if (!el) return;
-
-  const saved = localStorage.getItem(storageKey);
-  const currentStatus = saved !== null ? saved : defaultValue;
-  el.textContent = currentStatus;
-
-  if (className) {
-    document.body.classList.toggle(className, currentStatus === 'On');
+async function handleAuth(type) {
+  const email = authEmail.value.trim();
+  const password = authPassword.value.trim();
+  if (!email || !password) {
+    authError.textContent = 'Bitte fülle alle Felder aus.';
+    return;
   }
 
-  el.addEventListener('click', () => {
-    const newState = el.textContent === 'On' ? 'Off' : 'On';
-    el.textContent = newState;
-    localStorage.setItem(storageKey, newState);
-    if (className) {
-      document.body.classList.toggle(className, newState === 'On');
+  try {
+    let result;
+    if (type === 'login') {
+      result = await supabase.auth.signInWithPassword({ email, password });
+    } else {
+      result = await supabase.auth.signUp({ email, password });
     }
+
+    if (result.error) throw result.error;
+    
+    authOverlay.style.display = 'none';
+    document.body.classList.remove('auth-hidden');
+    loadUserChats();
+  } catch (err) {
+    authError.textContent = err.message;
+  }
+}
+
+btnLogin.addEventListener('click', () => handleAuth('login'));
+btnRegister.addEventListener('click', () => handleAuth('register'));
+
+async function checkSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    authOverlay.style.display = 'none';
+    document.body.classList.remove('auth-hidden');
+    loadUserChats();
+  }
+}
+checkSession();
+
+// --- CHAT MANAGEMENT ---
+let currentChatId = null;
+
+async function loadUserChats() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { data: chats, error } = await supabase
+    .from('chats')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    console.error('Error loading chats:', error);
+    return;
+  }
+
+  const chatListEl = document.getElementById('chatList');
+  const container = document.getElementById('chatListContainer');
+  if (container) container.style.display = 'flex';
+  if (!chatListEl) return;
+  chatListEl.innerHTML = '';
+
+  chats.forEach(chat => {
+    const div = document.createElement('div');
+    div.className = 'chat-item';
+    div.textContent = chat.title || 'Neuer Chat';
+    div.onclick = () => selectChat(chat.id, chat.title);
+    chatListEl.appendChild(div);
   });
 }
 
-// Settings Management
-const settings = {
-  temperature: 0.7,
-  maxTokens: 1024,
-  streaming: true
-};
+async function selectChat(id, title) {
+  currentChatId = id;
+  document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+  
+  const { data: messages, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('chat_id', id)
+    .order('created_at', { ascending: true });
 
-function loadSettings() {
-  const savedTemp = localStorage.getItem('nemotron_temp');
-  const savedTokens = localStorage.getItem('nemotron_tokens');
-  const savedStream = localStorage.getItem('nemotron_streaming');
+  if (error) return;
 
-  if (savedTemp) settings.temperature = parseFloat(savedTemp);
-  if (savedTokens) settings.maxTokens = parseInt(savedTokens);
-  if (savedStream) settings.streaming = savedStream === 'On';
-
-  // Update UI inputs
-  const tempIn = document.getElementById('tempInput');
-  const tokIn = document.getElementById('tokensInput');
-  if (tempIn) tempIn.value = settings.temperature;
-  if (tokIn) tokIn.value = settings.maxTokens;
+  messagesEl.innerHTML = '';
+  messages.forEach(m => addMessage(m.role, m.content));
 }
 
-function initSettingsListeners() {
-  const tempIn = document.getElementById('tempInput');
-  const tokIn = document.getElementById('tokensInput');
+document.getElementById('newChatBtn')?.addEventListener('click', async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: chat, error } = await supabase
+    .from('chats')
+    .insert({ user_id: user.id, title: 'Neuer Chat' })
+    .select()
+    .single();
 
-  if (tempIn) {
-    tempIn.addEventListener('input', (e) => {
-      settings.temperature = parseFloat(e.target.value);
-      localStorage.setItem('nemotron_temp', settings.temperature);
-    });
+  if (chat) {
+    selectChat(chat.id, chat.title);
+    loadUserChats();
   }
-  if (tokIn) {
-    tokIn.addEventListener('change', (e) => {
-      settings.maxTokens = parseInt(e.target.value);
-      localStorage.setItem('nemotron_tokens', settings.maxTokens);
-    });
-  }
-}
-
-// Initialize all settings
-setupToggle('compactToggle', 'nemotron_compact_mode', 'compact-mode', 'Off');
-setupToggle('darkModeToggle', 'nemotron_dark_mode', 'dark-mode', 'On');
-setupToggle('streamToggle', 'nemotron_streaming', '', 'On');
-
-loadSettings();
-initSettingsListeners();
+});
 
 
 // Load saved settings
