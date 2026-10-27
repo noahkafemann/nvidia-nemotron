@@ -330,10 +330,11 @@ const authPassword = document.getElementById('authPassword');
 const authError = document.getElementById('authError');
 
 async function handleAuth(type) {
+  if (!authEmail || !authPassword) return;
   const email = authEmail.value.trim();
   const password = authPassword.value.trim();
   if (!email || !password) {
-    authError.textContent = 'Bitte fülle alle Felder aus.';
+    if (authError) authError.textContent = 'Bitte fülle alle Felder aus.';
     return;
   }
 
@@ -351,16 +352,16 @@ async function handleAuth(type) {
     localStorage.setItem('userId', data.userId);
     window.location.href = 'chat.html';
   } catch (err) {
-    authError.textContent = err.message;
+    if (authError) authError.textContent = err.message;
   }
 }
 
-btnLogin.addEventListener('click', () => handleAuth('login'));
-btnRegister.addEventListener('click', () => handleAuth('register'));
+if (btnLogin) btnLogin.addEventListener('click', () => handleAuth('login'));
+if (btnRegister) btnRegister.addEventListener('click', () => handleAuth('register'));
 
 async function checkSession() {
   const userId = localStorage.getItem('userId');
-  if (userId) {
+  if (userId && authOverlay) {
     authOverlay.style.display = 'none';
     document.body.classList.remove('auth-hidden');
     loadUserChats();
