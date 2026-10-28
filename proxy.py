@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, make_response, session, Response
 import requests
 import os
 import sqlite3
+import json
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
@@ -42,7 +43,7 @@ init_db()
 
 @app.after_request
 def after_request(response):
-    # Redundant but explicit CORS headers for maximum compatibility
+    # Force CORS headers on every single response to prevent browser blocks
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
@@ -88,7 +89,6 @@ def handle_chats():
     if request.method == 'OPTIONS': return make_response(), 200
     user_id = request.headers.get('Authorization')
     if not user_id: return jsonify({'error': 'Nicht autorisiert'}), 401
-
     if request.method == 'POST':
         try:
             data = request.get_json()
@@ -101,7 +101,6 @@ def handle_chats():
         except Exception as e:
             logger.error(f"Create chat error: {e}")
             return jsonify({'error': 'Fehler beim Erstellen des Chats'}), 500
-
     try:
         with get_db() as conn:
             chats = conn.execute('SELECT * FROM chats WHERE user_id = ? ORDER BY updated_at DESC', (user_id,)).fetchall()
@@ -115,7 +114,6 @@ def handle_messages(chat_id):
     if request.method == 'OPTIONS': return make_response(), 200
     user_id = request.headers.get('Authorization')
     if not user_id: return jsonify({'error': 'Nicht autorisiert'}), 401
-
     if request.method == 'POST':
         try:
             data = request.get_json()
@@ -129,7 +127,6 @@ def handle_messages(chat_id):
         except Exception as e:
             logger.error(f"Save message error: {e}")
             return jsonify({'error': 'Fehler beim Speichern der Nachricht'}), 500
-
     try:
         with get_db() as conn:
             msgs = conn.execute('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY created_at ASC', (chat_id,)).fetchall()
@@ -141,32 +138,41 @@ def handle_messages(chat_id):
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
     if request.method == 'OPTIONS': return make_response(), 200
-    if not NVIDIA_API_KEY:
-        logger.error("NVIDIA_API_KEY is not set in environment variables")
-        return jsonify({'error': 'API Key fehlt auf dem Server'}), 500
+
+    # Check for API Key carefully
+    api_key = os.environ.get('NVIDIA_API_KEY', '')
+    if not api_key:
+        logger.error("CRITICAL: NVIDIA_API_KEY is missing in environment variables!")
+        return jsonify({'error': 'Server-Konfigurationsfehler: NVIDIA_API_KEY fehlt in Render-Umgebungsvariablen.'}), 500
 
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Keine Daten empfangen'}), 400
+
         stream = data.get('stream', False)
 
         if stream:
             def generate():
                 try:
-                    with requests.post(
-                        f'{API_BASE}/chat/completions',
-                        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {NVIDIA_API_KEY}'},
-                        json={
-                            'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
-                            'messages': data.get('messages', []),
-                            'temperature': data.get('temperature', 0.7),
-                            'max_tokens': data.get('max_tokens', 1024),
-                            'stream': True
-                        },
-                        stream=True,
-                        timeout=60
-                    ) as r:
+                    # Using a session for stability
+                    with requests.Session() as session:
+                        r = session.post(
+                            f'{API_BASE}/chat/completions',
+                            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
+                            json={
+                                'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
+                                'messages': data.get('messages', []),
+                                'temperature': data.get('temperature', 0.7),
+                                'max_tokens': data.get('max_tokens', 1024),
+                                'stream': True
+                            },
+                            stream=True,
+                            timeout=60
+                        )
                         if r.status_code != 200:
-                            yield f"data: {jsonify({'error': r.text}).get_data(as_text=True)}\n\n"
+                            err_msg = json.dumps({'error': f'NVIDIA API Error {r.status_code}: {r.text}'})
+                            yield f"data: {err_msg}\n\n"
                             return
 
                         for line in r.iter_lines():
@@ -178,13 +184,14 @@ def chat():
                                     yield "data: [DONE]\n\n"
                 except Exception as e:
                     logger.error(f"Stream error: {e}")
-                    yield f"data: {jsonify({'error': str(e)}).get_data(as_text=True)}\n\n"
+                    err_msg = json.dumps({'error': str(e)})
+                    yield f"data: {err_msg}\n\n"
 
             return Response(generate(), mimetype='text/event-stream')
         else:
             response = requests.post(
                 f'{API_BASE}/chat/completions',
-                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {NVIDIA_API_KEY}'},
+                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
                 json={
                     'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
                     'messages': data.get('messages', []),
@@ -197,7 +204,7 @@ def chat():
             return jsonify(response.json()), response.status_code
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': f"Interner Serverfehler: {str(e)}"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
