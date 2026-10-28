@@ -18,9 +18,13 @@ app.secret_key = os.environ.get('SECRET_KEY', 'nemotron-secret-key-123')
 # Maximum CORS flexibility for Render deployment
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Environment Variables
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '')
 API_BASE = 'https://integrate.api.nvidia.com/v1'
-DB_PATH = 'database.db'
+
+# Use /data/database.db if on Render (Persistent Disk), otherwise local
+DB_PATH = os.environ.get('DATABASE_URL', '/data/database.db' if os.path.exists('/data') else 'database.db')
+logger.info(f"Using database path: {DB_PATH}")
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)

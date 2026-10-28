@@ -11,7 +11,7 @@ function initAuth() {
   async function handleAuth(type) {
     const email = authEmail?.value?.trim();
     const password = authPassword?.value?.trim();
-    
+
     if (!email || !password) {
       if (authError) authError.textContent = 'Bitte fülle alle Felder aus.';
       return;
@@ -27,7 +27,7 @@ function initAuth() {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Ein Fehler ist aufgetreten');
-      
+
       localStorage.setItem('userId', data.userId);
       window.location.href = 'chat.html';
     } catch (err) {
