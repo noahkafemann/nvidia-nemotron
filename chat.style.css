@@ -1,5 +1,19 @@
 /* chat.style.css */
 :root {
+  --bg: #ffffff;
+  --panel: rgba(240, 240, 245, 0.8);
+  --accent: #0077a8;
+  --accent-dim: #004a6b;
+  --text: #1a1a1a;
+  --muted: #64748b;
+  --border: rgba(0, 0, 0, 0.1);
+  --glass: rgba(0, 0, 0, 0.03);
+  --success: #059669;
+  --error: #dc2626;
+  --sidebar-width: 260px;
+}
+
+body.dark-mode {
   --bg: #050508;
   --panel: rgba(18, 18, 26, 0.6);
   --accent: #00f2ff;
@@ -10,17 +24,17 @@
   --glass: rgba(255, 255, 255, 0.03);
   --success: #22d3ee;
   --error: #f87171;
-  --sidebar-width: 260px;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  height: 100vh;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-  overflow: hidden;
+body.compact-mode .bubble {
+  padding: 0.5rem 0.8rem;
+  font-size: 0.9rem;
+}
+body.compact-mode .msg {
+  margin-bottom: 0.75rem;
+}
+body.compact-mode .app-header {
+  padding: 1rem 1rem 0.75rem;
 }
 
 .grid-bg {
