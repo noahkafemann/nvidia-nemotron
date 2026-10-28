@@ -8,7 +8,8 @@ import uuid
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'nemotron-secret-key-123')
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
+
 
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '')
 API_BASE = 'https://integrate.api.nvidia.com/v1'
