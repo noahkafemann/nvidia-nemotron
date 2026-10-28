@@ -13,7 +13,8 @@
   --sidebar-width: 260px;
 }
 
-body.dark-mode {
+/* Futuristisch Dunkel (Standard) */
+body.theme-dark {
   --bg: #050508;
   --panel: rgba(18, 18, 26, 0.6);
   --accent: #00f2ff;
@@ -24,6 +25,62 @@ body.dark-mode {
   --glass: rgba(255, 255, 255, 0.03);
   --success: #22d3ee;
   --error: #f87171;
+}
+
+/* Neon Night */
+body.theme-neon {
+  --bg: #0d0221;
+  --panel: rgba(26, 11, 54, 0.7);
+  --accent: #ff00ff;
+  --accent-dim: #bc13fe;
+  --text: #f0f0f0;
+  --muted: #a29bfe;
+  --border: rgba(255, 0, 255, 0.3);
+  --glass: rgba(255, 0, 255, 0.05);
+  --success: #00ffaa;
+  --error: #ff4d4d;
+}
+
+/* Deep Ocean */
+body.theme-ocean {
+  --bg: #001219;
+  --panel: rgba(0, 35, 55, 0.7);
+  --accent: #00b4d8;
+  --accent-dim: #0077b6;
+  --text: #caf0f8;
+  --muted: #90e0ef;
+  --border: rgba(0, 180, 216, 0.3);
+  --glass: rgba(0, 180, 216, 0.05);
+  --success: #48cae4s;
+  --error: #ef476f;
+}
+
+/* Sunset Glow */
+body.theme-sunset {
+  --bg: #2d1b2e;
+  --panel: rgba(60, 30, 60, 0.7);
+  --accent: #ff8c00;
+  --accent-dim: #e67e22;
+  --text: #fff5e6;
+  --muted: #d35400;
+  --border: rgba(255, 140, 0, 0.3);
+  --glass: rgba(255, 140, 0, 0.05);
+  --success: #f1c40f;
+  --error: #c0392b;
+}
+
+/* Emerald Forest */
+body.theme-forest {
+  --bg: #0b1a12;
+  --panel: rgba(20, 40, 30, 0.7);
+  --accent: #2ecc71;
+  --accent-dim: #27ae60;
+  --text: #e8f5e9;
+  --muted: #a5d6a7;
+  --border: rgba(46, 204, 113, 0.3);
+  --glass: rgba(46, 204, 113, 0.05);
+  --success: #82e0aa;
+  --error: #e74c3c;
 }
 
 body.compact-mode .bubble {
