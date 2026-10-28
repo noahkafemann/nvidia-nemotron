@@ -1,4 +1,4 @@
-// chat.js - Rewritten for stability, performance, and complete feature set
+// chat.js - Bulletproof Version
 const CONFIG = {
     API_BASE: 'https://integrate.api.nvidia.com/v1',
     PROXY_URL: 'https://nvidia-nemotron.onrender.com',
@@ -28,75 +28,92 @@ class NemotronApp {
         this.elements = {};
         this.streamController = null;
 
-        this.init();
+        // Immediate initialization to avoid async race conditions for UI
+        this.initSync();
+        this.initAsync();
     }
 
-    async init() {
+    initSync() {
+        console.log("NemotronApp: Starting sync initialization...");
         this.cacheElements();
         this.setupEventListeners();
         this.setupToggles();
         this.loadSettings();
 
-        // Auth Guard
+        // Basic Auth Guard (Sync part)
         const userId = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID);
         if (!userId) {
+            console.warn("No userId found, redirecting to login...");
             window.location.href = 'index.html';
-            return;
         }
+    }
 
-        await this.loadChatList();
-        this.updateApiStatus();
+    async initAsync() {
+        try {
+            console.log("NemotronApp: Starting async initialization...");
+            await this.loadChatList();
+            this.updateApiStatus();
+        } catch (e) {
+            console.error("NemotronApp: Async init failed", e);
+        }
     }
 
     cacheElements() {
+        const getEl = (id) => document.getElementById(id);
         this.elements = {
-            messagesEl: document.getElementById('messages'),
-            form: document.getElementById('chatForm'),
-            input: document.getElementById('userInput'),
-            sendBtn: document.getElementById('sendBtn'),
-            statusEl: document.getElementById('status'),
-            keyWarning: document.getElementById('key-warning'),
-            modelSelect: document.getElementById('modelSelect'),
-            clearChatBtn: document.getElementById('clearChatBtn'),
-            apiKeyInput: document.getElementById('apiKeyInput'),
-            saveKeyBtn: document.getElementById('saveKeyBtn'),
+            messagesEl: getEl('messages'),
+            form: getEl('chatForm'),
+            input: getEl('userInput'),
+            sendBtn: getEl('sendBtn'),
+            statusEl: getEl('status'),
+            keyWarning: getEl('key-warning'),
+            modelSelect: getEl('modelSelect'),
+            clearChatBtn: getEl('clearChatBtn'),
+            apiKeyInput: getEl('apiKeyInput'),
+            saveKeyBtn: getEl('saveKeyBtn'),
             apiStatusDot: document.querySelector('.status-dot'),
-            apiStatusText: document.getElementById('apiStatusText'),
-            navChat: document.getElementById('navChat'),
-            navHistory: document.getElementById('navHistory'),
-            navSettings: document.getElementById('navSettings'),
-            chatView: document.getElementById('chatView'),
-            historyView: document.getElementById('historyView'),
-            settingsView: document.getElementById('settingsView'),
-            chatList: document.getElementById('chatList'),
-            chatListContainer: document.getElementById('chatListContainer'),
-            newChatBtn: document.getElementById('newChatBtn'),
-            darkModeToggle: document.getElementById('darkModeToggle'),
-            streamToggle: document.getElementById('streamToggle'),
-            compactToggle: document.getElementById('compactToggle'),
-            tempInput: document.getElementById('tempInput'),
-            tokensInput: document.getElementById('tokensInput')
+            apiStatusText: getEl('apiStatusText'),
+            navChat: getEl('navChat'),
+            navHistory: getEl('navHistory'),
+            navSettings: getEl('navSettings'),
+            chatView: getEl('chatView'),
+            historyView: getEl('historyView'),
+            settingsView: getEl('settingsView'),
+            chatList: getEl('chatList'),
+            chatListContainer: getEl('chatListContainer'),
+            newChatBtn: getEl('newChatBtn'),
+            darkModeToggle: getEl('darkModeToggle'),
+            streamToggle: getEl('streamToggle'),
+            compactToggle: getEl('compactToggle'),
+            tempInput: getEl('tempInput'),
+            tokensInput: getEl('tokensInput')
         };
     }
 
     setupEventListeners() {
-        // Navigation
+        console.log("NemotronApp: Binding events...");
+
+        // Navigation - Use optional chaining and ensure they exist
         this.elements.navChat?.addEventListener('click', () => this.switchView('chat'));
         this.elements.navHistory?.addEventListener('click', () => this.switchView('history'));
         this.elements.navSettings?.addEventListener('click', () => this.switchView('settings'));
 
         // Chat Form
-        this.elements.form?.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleSendMessage();
-        });
-
-        this.elements.input?.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        if (this.elements.form) {
+            this.elements.form.addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.elements.form?.requestSubmit();
-            }
-        });
+                this.handleSendMessage();
+            });
+        }
+
+        if (this.elements.input) {
+            this.elements.input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.elements.form?.requestSubmit();
+                }
+            });
+        }
 
         // Sidebar Actions
         this.elements.modelSelect?.addEventListener('change', (e) => {
@@ -121,6 +138,7 @@ class NemotronApp {
             this.state.maxTokens = parseInt(e.target.value);
             this.saveSettings();
         });
+        console.log("NemotronApp: Events bound successfully.");
     }
 
     setupToggles() {
@@ -152,11 +170,13 @@ class NemotronApp {
     loadSettings() {
         const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.SETTINGS);
         if (saved) {
-            const parsed = JSON.parse(saved);
-            this.state.temperature = parsed.temperature || 0.7;
-            this.state.maxTokens = parsed.maxTokens || 1024;
-            if (this.elements.tempInput) this.elements.tempInput.value = this.state.temperature;
-            if (this.elements.tokensInput) this.elements.tokensInput.value = this.state.maxTokens;
+            try {
+                const parsed = JSON.parse(saved);
+                this.state.temperature = parsed.temperature || 0.7;
+                this.state.maxTokens = parsed.maxTokens || 1024;
+                if (this.elements.tempInput) this.elements.tempInput.value = this.state.temperature;
+                if (this.elements.tokensInput) this.elements.tokensInput.value = this.state.maxTokens;
+            } catch (e) { console.error("Settings parse error", e); }
         }
     }
 
@@ -168,6 +188,7 @@ class NemotronApp {
     }
 
     switchView(view) {
+        console.log(`Switching to view: ${view}`);
         const views = {
             chat: { el: this.elements.chatView, nav: this.elements.navChat },
             history: { el: this.elements.historyView, nav: this.elements.navHistory },
@@ -294,7 +315,6 @@ class NemotronApp {
     }
 
     async saveMessageToHistory(content) {
-        const role = 'assistant'; // We only save the AI response here for brevity, or both
         const userMsg = this.state.history[this.state.history.length - 2]?.content;
 
         try {
@@ -472,5 +492,9 @@ class NemotronApp {
 
 // Initialize App
 window.addEventListener('DOMContentLoaded', () => {
-    new NemotronApp();
+    try {
+        new NemotronApp();
+    } catch (e) {
+        console.error("Critical App Initialization Error:", e);
+    }
 });
