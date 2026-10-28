@@ -7,6 +7,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import logging
+from pymongo import MongoClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,29 +22,30 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Environment Variables
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '')
 API_BASE = 'https://integrate.api.nvidia.com/v1'
+MONGODB_URI = os.environ.get('MONGODB_URI', '')
 
-# Use /data/database.db if on Render (Persistent Disk), otherwise local
-DB_PATH = os.environ.get('DATABASE_URL', '/data/database.db' if os.path.exists('/data') else 'database.db')
-logger.info(f"Using database path: {DB_PATH}")
+# MongoDB Client Setup
+client = None
+db = None
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def connect_db():
+    global client, db
+    if client is None:
+        try:
+            if not MONGODB_URI:
+                logger.error("MONGODB_URI is not set in environment variables!")
+                return False
+            client = MongoClient(MONGODB_URI)
+            db = client.get_database('nemotron_db')
+            logger.info("Successfully connected to MongoDB Atlas")
+            return True
+        except Exception as e:
+            logger.error(f"MongoDB Connection failed: {e}")
+            return False
+    return True
 
-def init_db():
-    try:
-        with get_db() as conn:
-            conn.execute('CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE, password TEXT)')
-            conn.execute('CREATE TABLE IF NOT EXISTS chats (id TEXT PRIMARY KEY, user_id TEXT, title TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
-            conn.execute('CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, role TEXT, content TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)')
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_chats_user ON chats(user_id)')
-            conn.execute('CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id)')
-            conn.commit()
-    except Exception as e:
-        logger.error(f"Database init failed: {e}")
-
-init_db()
+# Ensure connection on startup
+connect_db()
 
 @app.after_request
 def after_request(response):
@@ -61,14 +63,24 @@ def register():
         password = data.get('password')
         if not email or not password:
             return jsonify({'error': 'Email und Passwort erforderlich'}), 400
+
+        if not connect_db():
+            return jsonify({'error': 'Datenbankverbindung fehlgeschlagen'}), 500
+
+        users_col = db.users
+        if users_col.find_one({'email': email}):
+            return jsonify({'error': 'Email bereits vergeben'}), 400
+
         user_id = str(uuid.uuid4())
         hashed_pw = generate_password_hash(password)
-        with get_db() as conn:
-            conn.execute('INSERT INTO users (id, email, password) VALUES (?, ?, ?)', (user_id, email, hashed_pw))
-            conn.commit()
+
+        users_col.insert_one({
+            'id': user_id,
+            'email': email,
+            'password': hashed_pw
+        })
+
         return jsonify({'message': 'User registriert', 'userId': user_id}), 201
-    except sqlite3.IntegrityError:
-        return jsonify({'error': 'Email bereits vergeben'}), 400
     except Exception as e:
         logger.error(f"Register error: {e}")
         return jsonify({'error': 'Interner Serverfehler'}), 500
@@ -79,8 +91,12 @@ def login():
         data = request.get_json()
         email = data.get('email')
         password = data.get('password')
-        with get_db() as conn:
-            user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+
+        if not connect_db():
+            return jsonify({'error': 'Datenbankverbindung fehlgeschlagen'}), 500
+
+        user = db.users.find_one({'email': email})
+
         if user and check_password_hash(user['password'], password):
             return jsonify({'message': 'Login erfolgreich', 'userId': user['id']}), 200
         return jsonify({'error': 'Ungültige Zugangsdaten'}), 401
@@ -93,22 +109,33 @@ def handle_chats():
     if request.method == 'OPTIONS': return make_response(), 200
     user_id = request.headers.get('Authorization')
     if not user_id: return jsonify({'error': 'Nicht autorisiert'}), 401
+
+    if not connect_db():
+        return jsonify({'error': 'Datenbankverbindung fehlgeschlagen'}), 500
+
+    chats_col = db.chats
+
     if request.method == 'POST':
         try:
             data = request.get_json()
             chat_id = str(uuid.uuid4())
             title = data.get('title', 'Neuer Chat')
-            with get_db() as conn:
-                conn.execute('INSERT INTO chats (id, user_id, title) VALUES (?, ?, ?)', (chat_id, user_id, title))
-                conn.commit()
+
+            chats_col.insert_one({
+                'id': chat_id,
+                'user_id': user_id,
+                'title': title,
+                'updated_at': 'now'
+            })
             return jsonify({'id': chat_id, 'title': title}), 201
         except Exception as e:
             logger.error(f"Create chat error: {e}")
             return jsonify({'error': 'Fehler beim Erstellen des Chats'}), 500
+
     try:
-        with get_db() as conn:
-            chats = conn.execute('SELECT * FROM chats WHERE user_id = ? ORDER BY updated_at DESC', (user_id,)).fetchall()
-            return jsonify([dict(row) for row in chats]), 200
+        # Get chats for user
+        chats = list(chats_col.find({'user_id': user_id}))
+        return jsonify([{'id': c['id'], 'title': c['title']} for c in chats]), 200
     except Exception as e:
         logger.error(f"Get chats error: {e}")
         return jsonify({'error': 'Fehler beim Laden der Chats'}), 500
@@ -118,23 +145,36 @@ def handle_messages(chat_id):
     if request.method == 'OPTIONS': return make_response(), 200
     user_id = request.headers.get('Authorization')
     if not user_id: return jsonify({'error': 'Nicht autorisiert'}), 401
+
+    if not connect_db():
+        return jsonify({'error': 'Datenbankverbindung fehlgeschlagen'}), 500
+
+    msgs_col = db.messages
+    chats_col = db.chats
+
     if request.method == 'POST':
         try:
             data = request.get_json()
             role = data.get('role')
             content = data.get('content')
-            with get_db() as conn:
-                conn.execute('INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)', (chat_id, role, content))
-                conn.execute('UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (chat_id,))
-                conn.commit()
+
+            msgs_col.insert_one({
+                'chat_id': chat_id,
+                'role': role,
+                'content': content
+            })
+
+            # Update chat timestamp
+            chats_col.update_one({'id': chat_id}, {'$set': {'updated_at': 'now'}})
+
             return jsonify({'status': 'gespeichert'}), 201
         except Exception as e:
             logger.error(f"Save message error: {e}")
             return jsonify({'error': 'Fehler beim Speichern der Nachricht'}), 500
+
     try:
-        with get_db() as conn:
-            msgs = conn.execute('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY created_at ASC', (chat_id,)).fetchall()
-            return jsonify([dict(row) for row in msgs]), 200
+        msgs = list(msgs_col.find({'chat_id': chat_id}))
+        return jsonify([{'role': m['role'], 'content': m['content']} for m in msgs]), 200
     except Exception as e:
         logger.error(f"Get messages error: {e}")
         return jsonify({'error': 'Fehler beim Laden der Nachrichten'}), 500
@@ -142,12 +182,10 @@ def handle_messages(chat_id):
 @app.route('/chat', methods=['POST', 'OPTIONS'])
 def chat():
     if request.method == 'OPTIONS': return make_response(), 200
-
-    # Check for API Key carefully
     api_key = os.environ.get('NVIDIA_API_KEY', '')
     if not api_key:
-        logger.error("CRITICAL: NVIDIA_API_KEY is missing in environment variables!")
-        return jsonify({'error': 'Server-Konfigurationsfehler: NVIDIA_API_KEY fehlt in Render-Umgebungsvariablen.'}), 500
+        logger.error("CRITICAL: NVIDIA_API_KEY missing!")
+        return jsonify({'error': 'Server-Konfigurationsfehler: API Key fehlt.'}), 500
 
     try:
         data = request.get_json()
@@ -159,7 +197,6 @@ def chat():
         if stream:
             def generate():
                 try:
-                    # Using a session for stability
                     with requests.Session() as session:
                         r = session.post(
                             f'{API_BASE}/chat/completions',
@@ -195,7 +232,7 @@ def chat():
         else:
             response = requests.post(
                 f'{API_BASE}/chat/completions',
-                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
+                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_//_api_key}'},
                 json={
                     'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
                     'messages': data.get('messages', []),
