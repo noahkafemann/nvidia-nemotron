@@ -86,7 +86,8 @@ class NemotronApp {
             streamToggle: getEl('streamToggle'),
             compactToggle: getEl('compactToggle'),
             tempInput: getEl('tempInput'),
-            tokensInput: getEl('tokensInput')
+            tokensInput: getEl('tokensInput'),
+            themeSelect: getEl('themeSelect')
         };
     }
 
