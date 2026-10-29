@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nemotron Chat</title>
-  <link rel="stylesheet" href="chat.style.css">
+  <link rel="stylesheet" href="chat.style.css?v=3">
 </head>
 <body>
   <script>
@@ -45,6 +45,14 @@
       </div>
 
       <div class="sidebar-footer">
+        <div class="sidebar-action">
+          <label class="sidebar-label">Modell</label>
+          <div class="model-badge" title="Fest eingestelltes Modell">
+            <span class="model-badge-icon">&#128274;</span>
+            <span>Nemotron 3 Ultra 550B</span>
+          </div>
+        </div>
+
         <div class="sidebar-action">
           <label class="sidebar-label">Design</label>
           <select id="themeSelect" class="model-select">
@@ -164,6 +172,6 @@
       </div>
     </main>
   </app>
-  <script src="chat.js"></script>
+  <script src="chat.js?v=3"></script>
 </body>
 </html>

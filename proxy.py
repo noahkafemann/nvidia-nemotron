@@ -23,6 +23,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Environment Variables
 NVIDIA_API_KEY = os.environ.get('NVIDIA_API_KEY', '')
 API_BASE = 'https://integrate.api.nvidia.com/v1'
+MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
 MONGODB_URI = os.environ.get('MONGODB_URI', '')
 
 # MongoDB Client Setup
@@ -242,7 +243,7 @@ def chat():
                             f'{API_BASE}/chat/completions',
                             headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
                             json={
-                                'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
+                                'model': MODEL,
                                 'messages': data.get('messages', []),
                                 'temperature': data.get('temperature', 0.7),
                                 'max_tokens': data.get('max_tokens', 1024),
@@ -274,7 +275,7 @@ def chat():
                 f'{API_BASE}/chat/completions',
                 headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
                 json={
-                    'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
+                    'model': MODEL,
                     'messages': data.get('messages', []),
                     'temperature': data.get('temperature', 0.7),
                     'max_tokens': data.get('max_tokens', 1024),

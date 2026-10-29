@@ -19,7 +19,6 @@ class NemotronApp {
     constructor() {
         this.state = {
             history: [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }],
-            currentModel: CONFIG.DEFAULT_MODEL,
             currentChatId: null,
             chats: [],
             isStreaming: true,
@@ -259,7 +258,7 @@ class NemotronApp {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: this.state.currentModel,
+                    model: CONFIG.DEFAULT_MODEL,
                     messages: this.state.history,
                     temperature: this.state.temperature,
                     max_tokens: this.state.maxTokens,
@@ -269,39 +268,52 @@ class NemotronApp {
             });
 
             if (!response.ok) throw new Error(`Server Error: ${response.status}`);
-            if (!response.body) throw new Error('No response body received');
 
             bubble.classList.remove('typing');
             let fullReply = '';
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            if (this.state.isStreaming) {
+                if (!response.body) throw new Error('No response body received');
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
 
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const data = line.slice(6).trim();
-                    if (data === '[DONE]') continue;
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                    try {
-                        const parsed = JSON.parse(data);
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = line.slice(6).trim();
+                        if (data === '[DONE]') continue;
+
+                        let parsed;
+                        try {
+                            parsed = JSON.parse(data);
+                        } catch (e) {
+                            console.error('Parse error', e);
+                            continue;
+                        }
+
+                        if (parsed.error) throw new Error(parsed.error);
+
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullReply += delta;
                             bubble.innerHTML = this.renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
                             this.scrollToBottom();
                         }
-                    } catch (e) {
-                        console.error('Parse error', e);
                     }
                 }
+            } else {
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                fullReply = data.choices?.[0]?.message?.content || '';
             }
 
             bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');

@@ -445,6 +445,24 @@ sidebar {
   color: var(--error);
 }
 
+.model-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--accent-faint);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.model-badge-icon {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
 .status-indicator {
   display: flex;
   align-items: center;
