@@ -8,8 +8,10 @@ const CONFIG = {
         DARK_MODE: 'nemotron_dark_mode',
         COMPACT_MODE: 'nemotron_compact_mode',
         STREAMING: 'nemotron_streaming',
-        SETTINGS: 'nemotron_settings'
+        SETTINGS: 'nemotron_settings',
+        THEME: 'nemotron_theme'
     },
+    THEMES: ['theme-dark', 'theme-light', 'theme-neon', 'theme-ocean', 'theme-sunset', 'theme-forest'],
     DEFAULT_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct'
 };
 
@@ -39,6 +41,7 @@ class NemotronApp {
         this.setupEventListeners();
         this.setupToggles();
         this.loadSettings();
+        this.loadTheme();
 
         // Basic Auth Guard (Sync part)
         const userId = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID);
@@ -125,8 +128,10 @@ class NemotronApp {
         this.elements.newChatBtn?.addEventListener('click', () => this.createNewChat());
         this.elements.saveKeyBtn?.addEventListener('click', () => this.saveApiKey());
 
+        this.elements.themeSelect?.addEventListener('change', (e) => this.applyTheme(e.target.value));
+
         // Settings Toggles
-        this.elements.darkModeToggle?.addEventListener('click', () => this.toggleSetting(CONFIG.STORAGE_KEYS.DARK_MODE, 'darkModeToggle'));
+        this.elements.darkModeToggle?.addEventListener('click', () => this.toggleDarkMode());
         this.elements.streamToggle?.addEventListener('click', () => this.toggleSetting(CONFIG.STORAGE_KEYS.STREAMING, 'streamToggle'));
         this.elements.compactToggle?.addEventListener('click', () => this.toggleSetting(CONFIG.STORAGE_KEYS.COMPACT_MODE, 'compactToggle'));
 
@@ -151,9 +156,33 @@ class NemotronApp {
             if (className) document.body.classList.toggle(className, val === 'On');
         };
 
-        applyToggle(CONFIG.STORAGE_KEYS.DARK_MODE, 'darkModeToggle', 'dark-mode');
         applyToggle(CONFIG.STORAGE_KEYS.STREAMING, 'streamToggle', '');
         applyToggle(CONFIG.STORAGE_KEYS.COMPACT_MODE, 'compactToggle', 'compact-mode');
+    }
+
+    loadTheme() {
+        const saved = localStorage.getItem(CONFIG.STORAGE_KEYS.THEME) ||
+            (localStorage.getItem(CONFIG.STORAGE_KEYS.DARK_MODE) === 'Off' ? 'theme-light' : 'theme-dark');
+        this.applyTheme(saved, false);
+    }
+
+    applyTheme(theme, persist = true) {
+        if (!CONFIG.THEMES.includes(theme)) theme = 'theme-dark';
+
+        document.body.classList.remove(...CONFIG.THEMES);
+        document.body.classList.add(theme);
+
+        if (persist) localStorage.setItem(CONFIG.STORAGE_KEYS.THEME, theme);
+        if (this.elements.themeSelect) this.elements.themeSelect.value = theme;
+
+        const isLight = theme === 'theme-light';
+        if (this.elements.darkModeToggle) this.elements.darkModeToggle.textContent = isLight ? 'Off' : 'On';
+        localStorage.setItem(CONFIG.STORAGE_KEYS.DARK_MODE, isLight ? 'Off' : 'On');
+    }
+
+    toggleDarkMode() {
+        const next = document.body.classList.contains('theme-light') ? 'theme-dark' : 'theme-light';
+        this.applyTheme(next);
     }
 
     toggleSetting(key, elId) {
@@ -163,7 +192,6 @@ class NemotronApp {
         el.textContent = newState;
         localStorage.setItem(key, newState);
 
-        if (key === CONFIG.STORAGE_KEYS.DARK_MODE) document.body.classList.toggle('dark-mode', newState === 'On');
         if (key === CONFIG.STORAGE_KEYS.COMPACT_MODE) document.body.classList.toggle('compact-mode', newState === 'On');
         if (key === CONFIG.STORAGE_KEYS.STREAMING) this.state.isStreaming = (newState === 'On');
     }

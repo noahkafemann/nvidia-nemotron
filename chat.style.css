@@ -1,24 +1,178 @@
 /* chat.style.css */
 :root {
+  --sidebar-width: 260px;
   --bg: #020617;
   --panel: rgba(15, 23, 42, 0.8);
   --accent: #00f2ff;
   --accent-dim: #0077a8;
+  --accent-glow: rgba(0, 242, 255, 0.5);
+  --accent-soft: rgba(0, 242, 255, 0.15);
+  --accent-faint: rgba(0, 242, 255, 0.08);
+  --accent-dim-glow: rgba(0, 119, 168, 0.5);
+  --secondary: #8b5cf6;
+  --secondary-soft: rgba(139, 92, 246, 0.08);
+  --secondary-glow: rgba(139, 92, 246, 0.5);
+  --user-bubble-end: #003d54;
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --on-accent: #000000;
   --text: #f8fafc;
   --muted: #94a3b8;
   --border: rgba(0, 242, 255, 0.3);
   --glass: rgba(30, 41, 59, 0.5);
   --success: #22d3ee;
   --error: #f87171;
-  --sidebar-width: 260px;
+}
+
+/* Futuristisch (Dunkel) - Standard */
+body.theme-dark {
+  --bg: #020617;
+  --panel: rgba(15, 23, 42, 0.8);
+  --accent: #00f2ff;
+  --accent-dim: #0077a8;
+  --accent-glow: rgba(0, 242, 255, 0.5);
+  --accent-soft: rgba(0, 242, 255, 0.15);
+  --accent-faint: rgba(0, 242, 255, 0.08);
+  --accent-dim-glow: rgba(0, 119, 168, 0.5);
+  --secondary: #8b5cf6;
+  --secondary-soft: rgba(139, 92, 246, 0.08);
+  --secondary-glow: rgba(139, 92, 246, 0.5);
+  --user-bubble-end: #003d54;
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --on-accent: #000000;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --border: rgba(0, 242, 255, 0.3);
+  --glass: rgba(30, 41, 59, 0.5);
+  --success: #22d3ee;
+  --error: #f87171;
+}
+
+/* Klassisch (Hell) */
+body.theme-light {
+  --bg: #eef2f7;
+  --panel: rgba(255, 255, 255, 0.85);
+  --accent: #2563eb;
+  --accent-dim: #1d4ed8;
+  --accent-glow: rgba(37, 99, 235, 0.35);
+  --accent-soft: rgba(37, 99, 235, 0.12);
+  --accent-faint: rgba(37, 99, 235, 0.07);
+  --accent-dim-glow: rgba(29, 78, 216, 0.35);
+  --secondary: #7c3aed;
+  --secondary-soft: rgba(124, 58, 237, 0.08);
+  --secondary-glow: rgba(124, 58, 237, 0.35);
+  --user-bubble-end: #1e40af;
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --on-accent: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: rgba(37, 99, 235, 0.25);
+  --glass: rgba(255, 255, 255, 0.65);
+  --success: #059669;
+  --error: #dc2626;
+}
+
+/* Neon Night */
+body.theme-neon {
+  --bg: #0d0221;
+  --panel: rgba(26, 11, 54, 0.75);
+  --accent: #ff00ff;
+  --accent-dim: #bc13fe;
+  --accent-glow: rgba(255, 0, 255, 0.5);
+  --accent-soft: rgba(255, 0, 255, 0.15);
+  --accent-faint: rgba(255, 0, 255, 0.08);
+  --accent-dim-glow: rgba(188, 19, 254, 0.5);
+  --secondary: #00ffaa;
+  --secondary-soft: rgba(0, 255, 170, 0.08);
+  --secondary-glow: rgba(0, 255, 170, 0.5);
+  --user-bubble-end: #6a0dad;
+  --input-bg: rgba(0, 0, 0, 0.35);
+  --on-accent: #ffffff;
+  --text: #f0f0f0;
+  --muted: #a29bfe;
+  --border: rgba(255, 0, 255, 0.3);
+  --glass: rgba(255, 0, 255, 0.06);
+  --success: #00ffaa;
+  --error: #ff4d4d;
+}
+
+/* Deep Ocean */
+body.theme-ocean {
+  --bg: #001219;
+  --panel: rgba(0, 35, 55, 0.75);
+  --accent: #00b4d8;
+  --accent-dim: #0077b6;
+  --accent-glow: rgba(0, 180, 216, 0.5);
+  --accent-soft: rgba(0, 180, 216, 0.15);
+  --accent-faint: rgba(0, 180, 216, 0.08);
+  --accent-dim-glow: rgba(0, 119, 182, 0.5);
+  --secondary: #48cae4;
+  --secondary-soft: rgba(72, 202, 228, 0.08);
+  --secondary-glow: rgba(72, 202, 228, 0.5);
+  --user-bubble-end: #023e8a;
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --on-accent: #001219;
+  --text: #caf0f8;
+  --muted: #90e0ef;
+  --border: rgba(0, 180, 216, 0.3);
+  --glass: rgba(0, 180, 216, 0.06);
+  --success: #48cae4;
+  --error: #ef476f;
+}
+
+/* Sunset Glow */
+body.theme-sunset {
+  --bg: #2d1b2e;
+  --panel: rgba(60, 30, 60, 0.75);
+  --accent: #ff8c00;
+  --accent-dim: #e67e22;
+  --accent-glow: rgba(255, 140, 0, 0.5);
+  --accent-soft: rgba(255, 140, 0, 0.15);
+  --accent-faint: rgba(255, 140, 0, 0.08);
+  --accent-dim-glow: rgba(230, 126, 34, 0.5);
+  --secondary: #ff5e78;
+  --secondary-soft: rgba(255, 94, 120, 0.08);
+  --secondary-glow: rgba(255, 94, 120, 0.5);
+  --user-bubble-end: #b34700;
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --on-accent: #1a0f00;
+  --text: #fff5e6;
+  --muted: #d35400;
+  --border: rgba(255, 140, 0, 0.3);
+  --glass: rgba(255, 140, 0, 0.06);
+  --success: #f1c40f;
+  --error: #c0392b;
+}
+
+/* Emerald Forest */
+body.theme-forest {
+  --bg: #0b1a12;
+  --panel: rgba(20, 40, 30, 0.75);
+  --accent: #2ecc71;
+  --accent-dim: #27ae60;
+  --accent-glow: rgba(46, 204, 113, 0.5);
+  --accent-soft: rgba(46, 204, 113, 0.15);
+  --accent-faint: rgba(46, 204, 113, 0.08);
+  --accent-dim-glow: rgba(39, 174, 96, 0.5);
+  --secondary: #a3e635;
+  --secondary-soft: rgba(163, 230, 53, 0.08);
+  --secondary-glow: rgba(163, 230, 53, 0.5);
+  --user-bubble-end: #14532d;
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --on-accent: #04150b;
+  --text: #e8f5e9;
+  --muted: #a5d6a7;
+  --border: rgba(46, 204, 113, 0.3);
+  --glass: rgba(46, 204, 113, 0.06);
+  --success: #82e0aa;
+  --error: #e74c3c;
 }
 
 body {
   height: 100vh;
   background: var(--bg);
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(0, 242, 255, 0.05) 0%, transparent 40%),
-    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+    radial-gradient(circle at 20% 20%, var(--accent-faint) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, var(--secondary-soft) 0%, transparent 40%);
   color: var(--text);
   font-family: 'Segoe UI', Roboto, Arial, sans-serif;
   overflow: hidden;
@@ -55,29 +209,29 @@ sidebar {
 .logo-icon {
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  background: linear-gradient(135deg, var(--accent), var(--secondary));
   border-radius: 12px;
   display: grid;
   place-items: center;
   font-weight: 800;
-  color: #000;
+  color: var(--on-accent);
   font-size: 1.5rem;
-  box-shadow: 0 0 20px var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
 }
 
 .logo-text {
   font-weight: 800;
   font-size: 1.2rem;
-  background: linear-gradient(to right, #fff, var(--accent), #8b5cf6);
+  background: linear-gradient(to right, var(--text), var(--accent), var(--secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .nav-item.active {
-  background: rgba(0, 242, 255, 0.1);
+  background: var(--accent-faint);
   color: var(--accent);
   border-left: 4px solid var(--accent);
-  box-shadow: inset 5px 0 15px rgba(0, 242, 255, 0.1);
+  box-shadow: inset 5px 0 15px var(--accent-faint);
 }
 
 main {
@@ -94,10 +248,10 @@ main {
   font-size: 2.5rem;
   font-weight: 900;
   letter-spacing: -1px;
-  background: linear-gradient(to right, #fff, var(--accent), #8b5cf6);
+  background: linear-gradient(to right, var(--text), var(--accent), var(--secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.3));
+  filter: drop-shadow(0 0 10px var(--accent-glow));
 }
 
 .bubble {
@@ -117,33 +271,33 @@ main {
 }
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, var(--accent-dim), #003d54);
+  background: linear-gradient(135deg, var(--accent-dim), var(--user-bubble-end));
   color: #fff;
   border-bottom-right-radius: 4px;
-  box-shadow: 0 5px 20px rgba(0, 119, 168, 0.4);
+  box-shadow: 0 5px 20px var(--accent-dim-glow);
 }
 
 .msg.assistant .bubble {
   border-bottom-left-radius: 4px;
-  border: 1px solid rgba(0, 242, 255, 0.2);
+  border: 1px solid var(--border);
 }
 
 form {
   background: var(--panel);
   border: 1px solid var(--border);
-  box-shadow: 0 0 20px rgba(0, 242, 255, 0.1);
+  box-shadow: 0 0 20px var(--accent-faint);
   backdrop-filter: blur(15px);
 }
 
 button.send {
   background: var(--accent);
-  box-shadow: 0 0 15px var(--accent);
+  box-shadow: 0 0 15px var(--accent-glow);
   transition: all 0.3s ease;
 }
 
 button.send:hover {
   transform: scale(1.1) rotate(5deg);
-  box-shadow: 0 0 25px var(--accent);
+  box-shadow: 0 0 25px var(--accent-glow);
 }
 
 .status-dot.ok {
@@ -195,21 +349,21 @@ sidebar {
 .logo-icon {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  background: linear-gradient(135deg, var(--accent), var(--secondary));
   border-radius: 8px;
   display: grid;
   place-items: center;
   font-weight: 800;
-  color: #000;
+  color: var(--on-accent);
   font-size: 1.1rem;
-  box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+  box-shadow: 0 0 20px var(--accent-glow);
 }
 
 .logo-text {
   font-weight: 800;
   font-size: 1.1rem;
   letter-spacing: -0.5px;
-  background: linear-gradient(to right, #fff, var(--accent), #8b5cf6);
+  background: linear-gradient(to right, var(--text), var(--accent), var(--secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -235,12 +389,12 @@ sidebar {
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--accent-faint);
   color: var(--text);
 }
 
 .nav-item.active {
-  background: rgba(0, 242, 255, 0.15);
+  background: var(--accent-soft);
   color: var(--accent);
   border-left: 3px solid var(--accent);
 }
@@ -265,7 +419,7 @@ sidebar {
 
 .model-select {
   width: 100%;
-  background: rgba(0,0,0,0.3);
+  background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.6rem 0.8rem;
@@ -313,7 +467,7 @@ sidebar {
 
 .key-input-group input {
   flex: 1;
-  background: rgba(0,0,0,0.3);
+  background: var(--input-bg);
   border: 1px solid var(--border);
   color: var(--text);
   padding: 0.5rem 0.7rem;
@@ -325,7 +479,7 @@ sidebar {
 .key-input-group button {
   background: var(--accent);
   border: none;
-  color: #000;
+  color: var(--on-accent);
   padding: 0.5rem 0.8rem;
   border-radius: 6px;
   font-size: 0.8rem;
@@ -363,7 +517,7 @@ main {
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: -0.5px;
-  background: linear-gradient(to right, #fff, var(--accent), #8b5cf6);
+  background: linear-gradient(to right, var(--text), var(--accent), var(--secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
@@ -406,8 +560,8 @@ main {
   flex-shrink: 0;
 }
 
-.msg.user .avatar { background: var(--accent-dim); color: #fff; box-shadow: 0 0 15px rgba(0, 119, 168, 0.5); }
-.msg.assistant .avatar { background: linear-gradient(135deg, #8b5cf6, #d946ef); color: #fff; box-shadow: 0 0 15px rgba(139, 92, 246, 0.5); }
+.msg.user .avatar { background: var(--accent-dim); color: #fff; box-shadow: 0 0 15px var(--accent-dim-glow); }
+.msg.assistant .avatar { background: linear-gradient(135deg, var(--secondary), var(--accent)); color: #fff; box-shadow: 0 0 15px var(--secondary-glow); }
 
 .bubble {
   max-width: 70%;
@@ -424,10 +578,10 @@ main {
 }
 
 .msg.user .bubble {
-  background: linear-gradient(135deg, var(--accent-dim), #005f85);
+  background: linear-gradient(135deg, var(--accent-dim), var(--user-bubble-end));
   color: #fff;
   border-bottom-right-radius: 0.3rem;
-  box-shadow: 0 4px 20px rgba(0, 119, 168, 0.35);
+  box-shadow: 0 4px 20px var(--accent-dim-glow);
 }
 
 .msg.assistant .bubble {
@@ -480,7 +634,7 @@ button.send {
   border-radius: 50%;
   border: none;
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-weight: 700;
   cursor: pointer;
   display: grid;
@@ -488,7 +642,7 @@ button.send {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-button.send:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0, 242, 255, 0.5); }
+button.send:hover { transform: scale(1.05); box-shadow: 0 0 25px var(--accent-glow); }
 
 .status-row {
   display: flex;
@@ -512,7 +666,7 @@ button.send:hover { transform: scale(1.05); box-shadow: 0 0 25px rgba(0, 242, 25
 code {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9em;
-  background: rgba(255,255,255,0.05);
+  background: var(--glass);
   padding: 0.15em 0.3em;
   border-radius: 4px;
   color: var(--success);
@@ -561,7 +715,7 @@ code {
 
 .toggle {
   background: var(--accent);
-  color: #000;
+  color: var(--on-accent);
   font-size: 0.7rem;
   font-weight: 800;
   padding: 2px 8px;

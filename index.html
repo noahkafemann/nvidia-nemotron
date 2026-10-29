@@ -7,6 +7,12 @@
   <link rel="stylesheet" href="auth.style.css">
 </head>
 <body class="auth-page">
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('nemotron_theme');
+      if (savedTheme) document.body.classList.add(savedTheme);
+    } catch (e) {}
+  </script>
   <div class="grid-bg"></div>
   <div class="auth-container">
     <div class="auth-card">
