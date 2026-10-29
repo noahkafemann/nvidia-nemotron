@@ -7,6 +7,7 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import logging
+from datetime import datetime, timezone
 from pymongo import MongoClient
 
 # Configure logging
@@ -43,6 +44,18 @@ def connect_db():
             logger.error(f"MongoDB Connection failed: {e}")
             return False
     return True
+
+def chat_sort_value(value):
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).timestamp()
+        except ValueError:
+            return 0
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0
 
 # Ensure connection on startup
 connect_db()
@@ -125,7 +138,7 @@ def handle_chats():
                 'id': chat_id,
                 'user_id': user_id,
                 'title': title,
-                'updated_at': 'now'
+                'updated_at': datetime.now(timezone.utc).isoformat()
             })
             return jsonify({'id': chat_id, 'title': title}), 201
         except Exception as e:
@@ -133,9 +146,29 @@ def handle_chats():
             return jsonify({'error': 'Fehler beim Erstellen des Chats'}), 500
 
     try:
-        # Get chats for user
+        # Get chats for user, newest first
         chats = list(chats_col.find({'user_id': user_id}))
-        return jsonify([{'id': c['id'], 'title': c['title']} for c in chats]), 200
+        chats.sort(key=lambda c: chat_sort_value(c.get('updated_at')), reverse=True)
+
+        msgs_col = db.messages
+        result = []
+        for c in chats:
+            first_msg = msgs_col.find_one(
+                {'chat_id': c['id'], 'role': 'user'},
+                sort=[('_id', 1)]
+            )
+            preview = ''
+            if first_msg and first_msg.get('content'):
+                preview = first_msg['content'][:140]
+
+            result.append({
+                'id': c['id'],
+                'title': c.get('title', 'Neuer Chat'),
+                'updated_at': c.get('updated_at'),
+                'message_count': msgs_col.count_documents({'chat_id': c['id']}),
+                'preview': preview
+            })
+        return jsonify(result), 200
     except Exception as e:
         logger.error(f"Get chats error: {e}")
         return jsonify({'error': 'Fehler beim Laden der Chats'}), 500
@@ -152,6 +185,10 @@ def handle_messages(chat_id):
     msgs_col = db.messages
     chats_col = db.chats
 
+    chat = chats_col.find_one({'id': chat_id, 'user_id': user_id})
+    if not chat:
+        return jsonify({'error': 'Chat nicht gefunden'}), 404
+
     if request.method == 'POST':
         try:
             data = request.get_json()
@@ -165,7 +202,10 @@ def handle_messages(chat_id):
             })
 
             # Update chat timestamp
-            chats_col.update_one({'id': chat_id}, {'$set': {'updated_at': 'now'}})
+            chats_col.update_one(
+                {'id': chat_id, 'user_id': user_id},
+                {'$set': {'updated_at': datetime.now(timezone.utc).isoformat()}}
+            )
 
             return jsonify({'status': 'gespeichert'}), 201
         except Exception as e:
@@ -232,7 +272,7 @@ def chat():
         else:
             response = requests.post(
                 f'{API_BASE}/chat/completions',
-                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_//_api_key}'},
+                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'},
                 json={
                     'model': data.get('model', 'nvidia/nemotron-3-ultra-550b-a55b'),
                     'messages': data.get('messages', []),

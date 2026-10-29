@@ -126,8 +126,13 @@
           <h1>Chat-Verlauf</h1>
           <p>Deine letzten Konversationen</p>
         </header>
-        <div class="panel-content">
-          <div class="empty-state">Noch kein Verlauf vorhanden.</div>
+        <div class="panel-content history-content">
+          <div class="history-toolbar">
+            <div id="historyMeta" class="history-meta-text">Lade Verlauf ...</div>
+            <button id="refreshHistoryBtn" class="btn-refresh-history">&#8635; Aktualisieren</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+          <div id="historyEmpty" class="empty-state">Noch kein Verlauf vorhanden.</div>
         </div>
       </div>
 

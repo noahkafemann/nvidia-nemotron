@@ -21,6 +21,7 @@ class NemotronApp {
             history: [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }],
             currentModel: CONFIG.DEFAULT_MODEL,
             currentChatId: null,
+            chats: [],
             isStreaming: true,
             temperature: 0.7,
             maxTokens: 1024,
@@ -85,6 +86,10 @@ class NemotronApp {
             chatList: getEl('chatList'),
             chatListContainer: getEl('chatListContainer'),
             newChatBtn: getEl('newChatBtn'),
+            historyList: getEl('historyList'),
+            historyEmpty: getEl('historyEmpty'),
+            historyMeta: getEl('historyMeta'),
+            refreshHistoryBtn: getEl('refreshHistoryBtn'),
             darkModeToggle: getEl('darkModeToggle'),
             streamToggle: getEl('streamToggle'),
             compactToggle: getEl('compactToggle'),
@@ -127,6 +132,7 @@ class NemotronApp {
         this.elements.clearChatBtn?.addEventListener('click', () => this.clearCurrentChat());
         this.elements.newChatBtn?.addEventListener('click', () => this.createNewChat());
         this.elements.saveKeyBtn?.addEventListener('click', () => this.saveApiKey());
+        this.elements.refreshHistoryBtn?.addEventListener('click', () => this.loadChatList());
 
         this.elements.themeSelect?.addEventListener('change', (e) => this.applyTheme(e.target.value));
 
@@ -218,6 +224,8 @@ class NemotronApp {
 
     switchView(view) {
         console.log(`Switching to view: ${view}`);
+        if (view === 'history') this.loadChatList();
+
         const views = {
             chat: { el: this.elements.chatView, nav: this.elements.navChat },
             history: { el: this.elements.historyView, nav: this.elements.navHistory },
@@ -230,7 +238,7 @@ class NemotronApp {
         });
 
         const target = views[view];
-        if (target.el) target.el.style.display = 'block';
+        if (target.el) target.el.style.display = view === 'chat' ? 'block' : 'flex';
         if (target.nav) target.nav.classList.add('active');
     }
 
@@ -338,6 +346,7 @@ class NemotronApp {
             const data = await response.json();
             this.state.currentChatId = data.id;
             await this.saveMessageToHistory(firstReply);
+            await this.loadChatList();
         } catch (e) {
             console.error('Failed to auto-save chat', e);
         }
@@ -378,39 +387,157 @@ class NemotronApp {
         const userId = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID);
         if (!userId) return;
 
+        if (this.elements.historyMeta) this.elements.historyMeta.textContent = 'Lade Verlauf ...';
+
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats`, {
                 headers: { 'Authorization': userId }
             });
+            if (!response.ok) throw new Error(`Server Error: ${response.status}`);
+
             const chats = await response.json();
+            this.state.chats = Array.isArray(chats) ? chats : [];
 
             if (this.elements.chatListContainer) {
                 this.elements.chatListContainer.style.display = 'flex';
             }
 
-            if (this.elements.chatList) {
-                this.elements.chatList.innerHTML = '';
-                chats.forEach(chat => {
-                    const div = document.createElement('div');
-                    div.className = 'chat-item';
-                    div.textContent = chat.title || 'Neuer Chat';
-                    div.onclick = () => this.selectChat(chat.id, chat.title);
-                    this.elements.chatList.appendChild(div);
-                });
-            }
+            this.renderChatList();
+            this.renderHistory();
         } catch (e) {
             console.error('Error loading chats', e);
+            if (this.elements.historyMeta) this.elements.historyMeta.textContent = 'Verlauf nicht verfügbar';
+            if (this.elements.historyEmpty) {
+                this.elements.historyEmpty.textContent = 'Der Verlauf konnte nicht geladen werden. Bitte versuche es erneut.';
+                this.elements.historyEmpty.style.display = 'block';
+            }
         }
+    }
+
+    renderChatList() {
+        if (!this.elements.chatList) return;
+        this.elements.chatList.innerHTML = '';
+
+        if (!this.state.chats.length) {
+            const empty = document.createElement('div');
+            empty.className = 'chat-list-empty';
+            empty.textContent = 'Noch keine Chats';
+            this.elements.chatList.appendChild(empty);
+            return;
+        }
+
+        this.state.chats.forEach(chat => {
+            const item = document.createElement('div');
+            item.className = 'chat-item' + (chat.id === this.state.currentChatId ? ' active' : '');
+            item.dataset.chatId = chat.id;
+            item.title = chat.title || 'Neuer Chat';
+
+            const icon = document.createElement('span');
+            icon.className = 'chat-item-icon';
+            icon.textContent = '\u{1F4AC}';
+
+            const label = document.createElement('span');
+            label.className = 'chat-item-title';
+            label.textContent = chat.title || 'Neuer Chat';
+
+            item.append(icon, label);
+            item.addEventListener('click', () => this.selectChat(chat.id, chat.title));
+            this.elements.chatList.appendChild(item);
+        });
+    }
+
+    renderHistory() {
+        if (!this.elements.historyList) return;
+        this.elements.historyList.innerHTML = '';
+
+        const chats = this.state.chats;
+        if (this.elements.historyMeta) {
+            this.elements.historyMeta.textContent = chats.length === 1
+                ? '1 gespeicherter Chat'
+                : `${chats.length} gespeicherte Chats`;
+        }
+        if (this.elements.historyEmpty) {
+            this.elements.historyEmpty.textContent = 'Noch kein Verlauf vorhanden.';
+            this.elements.historyEmpty.style.display = chats.length ? 'none' : 'block';
+        }
+
+        chats.forEach(chat => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'history-item' + (chat.id === this.state.currentChatId ? ' active' : '');
+            item.dataset.chatId = chat.id;
+
+            const icon = document.createElement('span');
+            icon.className = 'history-icon';
+            icon.textContent = '\u{1F4AC}';
+
+            const body = document.createElement('span');
+            body.className = 'history-body';
+
+            const title = document.createElement('span');
+            title.className = 'history-title';
+            title.textContent = chat.title || 'Neuer Chat';
+
+            const preview = document.createElement('span');
+            preview.className = 'history-preview';
+            preview.textContent = chat.preview || 'Noch keine Nachrichten';
+
+            const meta = document.createElement('span');
+            meta.className = 'history-meta';
+
+            const messageCount = Number(chat.message_count) || 0;
+            const count = document.createElement('span');
+            count.textContent = `${messageCount} ${messageCount === 1 ? 'Nachricht' : 'Nachrichten'}`;
+
+            const date = document.createElement('span');
+            date.textContent = this.formatChatDate(chat.updated_at);
+
+            meta.append(count, date);
+            body.append(title, preview, meta);
+
+            const arrow = document.createElement('span');
+            arrow.className = 'history-arrow';
+            arrow.textContent = '\u2192';
+
+            item.append(icon, body, arrow);
+            item.addEventListener('click', () => this.selectChat(chat.id, chat.title));
+            this.elements.historyList.appendChild(item);
+        });
+    }
+
+    formatChatDate(value) {
+        if (!value || value === 'now') return 'Gespeichert';
+
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return 'Gespeichert';
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const dayDiff = Math.round((startOfToday - startOfDate) / 86400000);
+        const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+        if (dayDiff === 0) return `Heute, ${time}`;
+        if (dayDiff === 1) return `Gestern, ${time}`;
+        return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    updateActiveChat() {
+        document.querySelectorAll('.chat-item, .history-item').forEach(el => {
+            el.classList.toggle('active', el.dataset.chatId === this.state.currentChatId);
+        });
     }
 
     async selectChat(id, title) {
         this.state.currentChatId = id;
-        document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+        this.updateActiveChat();
+        this.switchView('chat');
 
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats/${id}/messages`, {
                 headers: { 'Authorization': localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID) }
             });
+            if (!response.ok) throw new Error(`Server Error: ${response.status}`);
             const messages = await response.json();
 
             this.elements.messagesEl.innerHTML = '';
@@ -430,6 +557,7 @@ class NemotronApp {
 
     createNewChat() {
         this.state.currentChatId = null;
+        this.updateActiveChat();
         this.elements.messagesEl.innerHTML = '';
         this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
         this.addMessage('assistant', 'Hallo! Ich bin ein neuer Chat. Wie kann ich dir helfen?');
@@ -441,6 +569,7 @@ class NemotronApp {
         this.elements.messagesEl.innerHTML = '';
         this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
         this.state.currentChatId = null;
+        this.updateActiveChat();
         this.addMessage('assistant', 'Chat geleert. Bereit für neue Fragen!');
     }
 
