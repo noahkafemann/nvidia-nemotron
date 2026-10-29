@@ -9,11 +9,24 @@ const CONFIG = {
         COMPACT_MODE: 'nemotron_compact_mode',
         STREAMING: 'nemotron_streaming',
         SETTINGS: 'nemotron_settings',
-        THEME: 'nemotron_theme'
+        THEME: 'nemotron_theme',
+        PULSE_COLLAPSED: 'nemotron_pulse_collapsed'
     },
     THEMES: ['theme-dark', 'theme-light', 'theme-neon', 'theme-ocean', 'theme-sunset', 'theme-forest'],
-    DEFAULT_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b'
+    DEFAULT_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b',
+    CONTEXT_WINDOW: 128000
 };
+
+const SPARKS = [
+    { tag: 'Code', text: 'Refaktoriere folgenden Code und erkläre die wichtigsten Verbesserungen: …' },
+    { tag: 'Debug', text: 'Ich habe folgenden Fehler. Analysiere die Ursache und zeige den minimalen Fix: …' },
+    { tag: 'Lernen', text: 'Erstelle mir einen 7-Tage-Lernplan zu [Thema] mit täglichen Übungen und einer kurzen Selbstkontrolle.' },
+    { tag: 'Kreativ', text: 'Schreibe eine atmosphärische Kurzgeschichte über [Idee] in genau 150 Wörtern mit einer überraschenden Wendung.' },
+    { tag: 'Strategie', text: 'Entwickle drei unkonventionelle Strategien für [Ziel] und bewerte sie nach Aufwand, Wirkung und Risiko.' },
+    { tag: 'Analyse', text: 'Analysiere [Thema] aus drei Perspektiven und erstelle eine Entscheidungsmatrix mit den wichtigsten Kriterien.' },
+    { tag: 'Produktivität', text: 'Hilf mir, meine Aufgaben mit der Eisenhower-Matrix zu priorisieren. Hier sind sie: …' },
+    { tag: 'Perspektive', text: 'Diskutiere [These] aus Sicht von [Person A] und [Person B]. Fasse am Ende den stärksten Einwand zusammen.' }
+];
 
 class NemotronApp {
     constructor() {
@@ -24,7 +37,8 @@ class NemotronApp {
             isStreaming: true,
             temperature: 0.7,
             maxTokens: 1024,
-            isTyping: false
+            isTyping: false,
+            pulse: { live: false, start: 0, firstToken: 0, chunks: 0, samples: [] }
         };
 
         this.elements = {};
@@ -42,6 +56,8 @@ class NemotronApp {
         this.setupToggles();
         this.loadSettings();
         this.loadTheme();
+        this.initPulse();
+        this.renderSparks();
 
         // Basic Auth Guard (Sync part)
         const userId = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID);
@@ -93,7 +109,20 @@ class NemotronApp {
             compactToggle: getEl('compactToggle'),
             tempInput: getEl('tempInput'),
             tokensInput: getEl('tokensInput'),
-            themeSelect: getEl('themeSelect')
+            themeSelect: getEl('themeSelect'),
+            pulseHud: getEl('pulseHud'),
+            pulseToggle: getEl('pulseToggle'),
+            pulseLatency: getEl('pulseLatency'),
+            pulseSpeed: getEl('pulseSpeed'),
+            pulseTokens: getEl('pulseTokens'),
+            pulseContext: getEl('pulseContext'),
+            pulseContextFill: getEl('pulseContextFill'),
+            pulseSpark: getEl('pulseSpark'),
+            sparkBtn: getEl('sparkBtn'),
+            sparkModal: getEl('sparkModal'),
+            sparkClose: getEl('sparkClose'),
+            sparkList: getEl('sparkList'),
+            sparkRandom: getEl('sparkRandom')
         };
     }
 
@@ -129,6 +158,20 @@ class NemotronApp {
         this.elements.refreshHistoryBtn?.addEventListener('click', () => this.loadChatList());
 
         this.elements.themeSelect?.addEventListener('change', (e) => this.applyTheme(e.target.value));
+
+        // Nemotron Pulse + Ideen-Schmiede
+        this.elements.pulseToggle?.addEventListener('click', () => this.togglePulse());
+        this.elements.sparkBtn?.addEventListener('click', () => this.openSparks());
+        this.elements.sparkClose?.addEventListener('click', () => this.closeSparks());
+        this.elements.sparkRandom?.addEventListener('click', () => this.randomSpark());
+        this.elements.sparkModal?.addEventListener('click', (e) => {
+            if (e.target === this.elements.sparkModal) this.closeSparks();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.elements.sparkModal && this.elements.sparkModal.style.display !== 'none') {
+                this.closeSparks();
+            }
+        });
 
         // Settings Toggles
         this.elements.darkModeToggle?.addEventListener('click', () => this.toggleDarkMode());
@@ -178,6 +221,7 @@ class NemotronApp {
         const isLight = theme === 'theme-light';
         if (this.elements.darkModeToggle) this.elements.darkModeToggle.textContent = isLight ? 'Off' : 'On';
         localStorage.setItem(CONFIG.STORAGE_KEYS.DARK_MODE, isLight ? 'Off' : 'On');
+        this.drawPulseSpark(this.state.pulse.samples);
     }
 
     toggleDarkMode() {
@@ -216,6 +260,180 @@ class NemotronApp {
         }));
     }
 
+    initPulse() {
+        const collapsed = localStorage.getItem(CONFIG.STORAGE_KEYS.PULSE_COLLAPSED) === 'true';
+        this.setPulseCollapsed(collapsed);
+        this.updateContextMeter();
+        this.drawPulseSpark([]);
+    }
+
+    setPulseCollapsed(collapsed) {
+        if (!this.elements.pulseHud) return;
+        this.elements.pulseHud.classList.toggle('collapsed', collapsed);
+        if (this.elements.pulseToggle) this.elements.pulseToggle.textContent = collapsed ? '+' : '\u2212';
+    }
+
+    togglePulse() {
+        if (!this.elements.pulseHud) return;
+        const collapsed = !this.elements.pulseHud.classList.contains('collapsed');
+        this.setPulseCollapsed(collapsed);
+        localStorage.setItem(CONFIG.STORAGE_KEYS.PULSE_COLLAPSED, collapsed ? 'true' : 'false');
+        if (!collapsed) this.drawPulseSpark(this.state.pulse.samples);
+    }
+
+    startPulse() {
+        this.state.pulse = { live: true, start: performance.now(), firstToken: 0, chunks: 0, samples: [] };
+        this.elements.pulseHud?.classList.add('live');
+        if (this.elements.pulseLatency) this.elements.pulseLatency.textContent = '\u2026';
+        if (this.elements.pulseSpeed) this.elements.pulseSpeed.textContent = '\u2026';
+        if (this.elements.pulseTokens) this.elements.pulseTokens.textContent = '0';
+        this.drawPulseSpark([]);
+    }
+
+    pulseOnChunk(count = 1) {
+        const pulse = this.state.pulse;
+        if (!pulse.live) return;
+
+        const now = performance.now();
+        if (!pulse.firstToken) pulse.firstToken = now;
+        pulse.chunks += count;
+
+        const elapsed = Math.max((now - pulse.firstToken) / 1000, 0.001);
+        const speed = pulse.chunks / elapsed;
+        pulse.samples.push(speed);
+        if (pulse.samples.length > 48) pulse.samples.shift();
+
+        if (this.elements.pulseLatency) this.elements.pulseLatency.textContent = `${Math.round(pulse.firstToken - pulse.start)} ms`;
+        if (this.elements.pulseSpeed) this.elements.pulseSpeed.textContent = `${speed.toFixed(1)}/s`;
+        if (this.elements.pulseTokens) this.elements.pulseTokens.textContent = String(pulse.chunks);
+        this.drawPulseSpark(pulse.samples);
+    }
+
+    finishPulse() {
+        const pulse = this.state.pulse;
+        if (!pulse.live) return;
+
+        pulse.live = false;
+        this.elements.pulseHud?.classList.remove('live');
+        if (pulse.chunks) {
+            const elapsed = Math.max((performance.now() - (pulse.firstToken || pulse.start)) / 1000, 0.001);
+            if (this.elements.pulseSpeed) this.elements.pulseSpeed.textContent = `${(pulse.chunks / elapsed).toFixed(1)}/s`;
+        } else {
+            if (this.elements.pulseLatency) this.elements.pulseLatency.textContent = '\u2013';
+            if (this.elements.pulseSpeed) this.elements.pulseSpeed.textContent = '\u2013';
+        }
+        this.updateContextMeter();
+    }
+
+    resetPulse() {
+        this.state.pulse = { live: false, start: 0, firstToken: 0, chunks: 0, samples: [] };
+        this.elements.pulseHud?.classList.remove('live');
+        if (this.elements.pulseLatency) this.elements.pulseLatency.textContent = '\u2013';
+        if (this.elements.pulseSpeed) this.elements.pulseSpeed.textContent = '\u2013';
+        if (this.elements.pulseTokens) this.elements.pulseTokens.textContent = '0';
+        this.drawPulseSpark([]);
+        this.updateContextMeter();
+    }
+
+    updateContextMeter() {
+        const text = this.state.history.map(m => m.content || '').join(' ');
+        const tokens = Math.round(text.length / 4);
+        const percent = Math.min(100, (tokens / CONFIG.CONTEXT_WINDOW) * 100);
+
+        if (this.elements.pulseContext) {
+            this.elements.pulseContext.textContent = tokens
+                ? `${percent < 1 ? '<1' : Math.round(percent)}%`
+                : '0%';
+        }
+        if (this.elements.pulseContextFill) {
+            this.elements.pulseContextFill.style.width = `${percent}%`;
+        }
+    }
+
+    drawPulseSpark(samples = []) {
+        const canvas = this.elements.pulseSpark;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const width = canvas.width;
+        const height = canvas.height;
+        ctx.clearRect(0, 0, width, height);
+        if (!samples || samples.length < 2) return;
+
+        const max = Math.max(...samples, 1);
+        const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#00f2ff';
+
+        ctx.beginPath();
+        samples.forEach((value, index) => {
+            const x = (index / (samples.length - 1)) * (width - 4) + 2;
+            const y = height - 3 - (value / max) * (height - 8);
+            if (index === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        ctx.lineTo(width - 2, height - 2);
+        ctx.lineTo(2, height - 2);
+        ctx.closePath();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = accent;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+
+    renderSparks() {
+        if (!this.elements.sparkList) return;
+        this.elements.sparkList.innerHTML = '';
+
+        SPARKS.forEach(spark => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'spark-item';
+
+            const tag = document.createElement('span');
+            tag.className = 'spark-tag';
+            tag.textContent = spark.tag;
+
+            const text = document.createElement('span');
+            text.className = 'spark-text';
+            text.textContent = spark.text;
+
+            item.append(tag, text);
+            item.addEventListener('click', () => this.useSpark(spark.text));
+            this.elements.sparkList.appendChild(item);
+        });
+    }
+
+    openSparks() {
+        if (!this.elements.sparkModal) return;
+        this.elements.sparkModal.style.display = 'flex';
+        this.elements.sparkClose?.focus();
+    }
+
+    closeSparks() {
+        if (this.elements.sparkModal) this.elements.sparkModal.style.display = 'none';
+        this.elements.sparkBtn?.focus();
+    }
+
+    useSpark(text) {
+        this.closeSparks();
+        if (!this.elements.input) return;
+        this.elements.input.value = text;
+        this.elements.input.focus();
+        this.elements.input.setSelectionRange(text.length, text.length);
+    }
+
+    randomSpark() {
+        const spark = SPARKS[Math.floor(Math.random() * SPARKS.length)];
+        if (spark) this.useSpark(spark.text);
+    }
+
     switchView(view) {
         console.log(`Switching to view: ${view}`);
         if (view === 'history') this.loadChatList();
@@ -245,9 +463,11 @@ class NemotronApp {
 
         this.elements.input.value = '';
         this.setTypingState(true);
+        this.startPulse();
 
         this.addMessage('user', text);
         this.state.history.push({ role: 'user', content: text });
+        this.updateContextMeter();
 
         const assistantMsg = this.addMessage('assistant', '', true);
         const bubble = assistantMsg.querySelector('.bubble');
@@ -305,6 +525,7 @@ class NemotronApp {
                         const delta = parsed.choices?.[0]?.delta?.content || '';
                         if (delta) {
                             fullReply += delta;
+                            this.pulseOnChunk();
                             bubble.innerHTML = this.renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
                             this.scrollToBottom();
                         }
@@ -314,10 +535,13 @@ class NemotronApp {
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
                 fullReply = data.choices?.[0]?.message?.content || '';
+                this.pulseOnChunk(Math.max(1, Math.round(fullReply.length / 4)));
             }
 
             bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');
             this.state.history.push({ role: 'assistant', content: fullReply });
+            if (fullReply) this.addBranchButton(bubble, this.state.history.length - 1);
+            this.updateContextMeter();
 
             if (this.state.currentChatId) {
                 await this.saveMessageToHistory(fullReply);
@@ -334,6 +558,7 @@ class NemotronApp {
                 this.setStatus('Fehler', 'error');
             }
         } finally {
+            this.finishPulse();
             this.setTypingState(false);
             this.scrollToBottom();
         }
@@ -555,6 +780,7 @@ class NemotronApp {
                 this.state.history.push(m);
             });
 
+            this.resetPulse();
             this.setStatus(`Chat "${title}" geladen`);
         } catch (e) {
             console.error('Error selecting chat', e);
@@ -567,7 +793,8 @@ class NemotronApp {
         this.updateActiveChat();
         this.elements.messagesEl.innerHTML = '';
         this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
-        this.addMessage('assistant', 'Hallo! Ich bin ein neuer Chat. Wie kann ich dir helfen?');
+        this.addMessage('assistant', 'Hallo! Ich bin ein neuer Chat. Wie kann ich dir helfen?', false, false);
+        this.resetPulse();
         this.switchView('chat');
     }
 
@@ -577,7 +804,8 @@ class NemotronApp {
         this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
         this.state.currentChatId = null;
         this.updateActiveChat();
-        this.addMessage('assistant', 'Chat geleert. Bereit für neue Fragen!');
+        this.addMessage('assistant', 'Chat geleert. Bereit für neue Fragen!', false, false);
+        this.resetPulse();
     }
 
     getApiKey() {
@@ -613,14 +841,99 @@ class NemotronApp {
         this.elements.statusEl.style.color = type === 'error' ? 'var(--error)' : (type === 'success' ? 'var(--success)' : 'var(--muted)');
     }
 
-    addMessage(role, content, typing = false) {
+    addBranchButton(bubble, historyIndex) {
+        if (!bubble || bubble.querySelector('.branch-btn')) return;
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'branch-btn';
+        button.title = 'Neuen Branch ab hier erstellen';
+        button.setAttribute('aria-label', 'Neuen Branch ab hier erstellen');
+        button.textContent = '\u21B3';
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.branchChat(historyIndex);
+        });
+        bubble.appendChild(button);
+    }
+
+    async branchChat(historyIndex) {
+        if (this.state.isTyping) return;
+        if (historyIndex < 1 || historyIndex >= this.state.history.length) return;
+
+        const messages = this.state.history
+            .slice(1, historyIndex + 1)
+            .map(m => ({ role: m.role, content: m.content }));
+        if (!messages.length) return;
+
+        const userId = localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID);
+        if (!userId) return;
+
+        const currentChat = this.state.chats.find(chat => chat.id === this.state.currentChatId);
+        const baseTitle = currentChat?.title || messages.find(m => m.role === 'user')?.content || 'Neuer Chat';
+        const title = `Branch: ${baseTitle}`.slice(0, 60);
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': userId
+        };
+
+        this.setStatus('Erstelle Branch ...');
+
+        try {
+            const createResponse = await fetch(`${CONFIG.PROXY_URL}/chats`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ title })
+            });
+            if (!createResponse.ok) throw new Error(`Server Error: ${createResponse.status}`);
+            const created = await createResponse.json();
+            if (!created.id) throw new Error('Branch konnte nicht erstellt werden');
+
+            for (const message of messages) {
+                const saveResponse = await fetch(`${CONFIG.PROXY_URL}/chats/${created.id}/messages`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(message)
+                });
+                if (!saveResponse.ok) throw new Error(`Server Error: ${saveResponse.status}`);
+            }
+
+            this.state.currentChatId = created.id;
+            this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+            this.elements.messagesEl.innerHTML = '';
+            messages.forEach(message => {
+                this.addMessage(message.role, message.content);
+                this.state.history.push(message);
+            });
+
+            this.resetPulse();
+            this.updateActiveChat();
+            await this.loadChatList();
+            this.switchView('chat');
+            this.setStatus('Branch erstellt \u2014 stelle jetzt deine alternative Frage', 'success');
+            this.elements.input?.focus();
+        } catch (e) {
+            console.error('Branch error', e);
+            this.setStatus('Branch fehlgeschlagen', 'error');
+        }
+    }
+
+    addMessage(role, content, typing = false, branchable = true) {
         const div = document.createElement('div');
         div.className = 'msg ' + role;
         const avatar = role === 'user' ? '&#128101;' : '&#128169;';
+        const historyIndex = this.state.history.length;
         div.innerHTML = `
             <div class="avatar">${avatar}</div>
             <div class="bubble${typing ? ' typing' : ''}">${typing ? '<span class="stream-cursor"></span>' : this.escapeHtml(content)}</div>
         `;
+
+        const bubble = div.querySelector('.bubble');
+        if (role === 'assistant' && !typing && branchable && content) {
+            this.addBranchButton(bubble, historyIndex);
+        }
+
         this.elements.messagesEl.appendChild(div);
         this.scrollToBottom();
         return div;

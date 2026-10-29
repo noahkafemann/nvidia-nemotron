@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nemotron Chat</title>
-  <link rel="stylesheet" href="chat.style.css?v=3">
+  <link rel="stylesheet" href="chat.style.css?v=4">
 </head>
 <body>
   <script>
@@ -103,6 +103,21 @@
         </messages>
 
         <input-area>
+          <div class="pulse-strip" id="pulseHud">
+            <div class="pulse-strip-title">
+              <span class="pulse-live-dot"></span>
+              <span>Nemotron Pulse</span>
+            </div>
+            <div class="pulse-strip-metrics">
+              <div class="pulse-metric" title="Time to first token"><span>TTFT</span><strong id="pulseLatency">&#8211;</strong></div>
+              <div class="pulse-metric" title="Tokens pro Sekunde"><span>Speed</span><strong id="pulseSpeed">&#8211;</strong></div>
+              <div class="pulse-metric" title="Geschätzte Tokens der letzten Antwort"><span>Tokens</span><strong id="pulseTokens">0</strong></div>
+              <div class="pulse-metric" title="Geschätzte Kontextauslastung (128k)"><span>Kontext</span><strong id="pulseContext">0%</strong></div>
+            </div>
+            <canvas id="pulseSpark" class="pulse-spark" width="220" height="34"></canvas>
+            <button id="pulseToggle" class="pulse-toggle" type="button" title="Pulse ein-/ausblenden">&#8722;</button>
+            <div class="pulse-context"><div id="pulseContextFill" class="pulse-context-fill"></div></div>
+          </div>
           <div class="input-wrapper">
             <form id="chatForm">
               <input id="userInput" type="text" placeholder="Nachricht eingeben &#8230;" autocomplete="off" />
@@ -111,6 +126,7 @@
             <div class="input-hints">
               <span class="hint">&#8987; Enter = Senden</span>
               <span class="hint">&#8617; Shift+Enter = Zeilenumbruch</span>
+              <button id="sparkBtn" class="spark-btn" type="button">Ideen-Schmiede</button>
             </div>
           </div>
           <div class="status-row">
@@ -172,6 +188,19 @@
       </div>
     </main>
   </app>
-  <script src="chat.js?v=3"></script>
+
+  <div id="sparkModal" class="spark-modal" style="display: none;">
+    <div class="spark-dialog" role="dialog" aria-modal="true" aria-labelledby="sparkTitle">
+      <div class="spark-header">
+        <h2 id="sparkTitle">Ideen-Schmiede</h2>
+        <button id="sparkClose" class="spark-close" type="button" title="Schließen">&#215;</button>
+      </div>
+      <p class="spark-sub">Wähle einen Impuls oder lass Nemotron überraschen.</p>
+      <div id="sparkList" class="spark-list"></div>
+      <button id="sparkRandom" class="spark-random" type="button">Überraschen</button>
+    </div>
+  </div>
+
+  <script src="chat.js?v=4"></script>
 </body>
 </html>
