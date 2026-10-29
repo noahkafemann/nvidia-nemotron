@@ -12,7 +12,7 @@ const CONFIG = {
         THEME: 'nemotron_theme'
     },
     THEMES: ['theme-dark', 'theme-light', 'theme-neon', 'theme-ocean', 'theme-sunset', 'theme-forest'],
-    DEFAULT_MODEL: 'nvidia/llama-3.1-nemotron-70b-instruct'
+    DEFAULT_MODEL: 'nvidia/nemotron-3-ultra-550b-a55b'
 };
 
 class NemotronApp {
@@ -71,7 +71,6 @@ class NemotronApp {
             sendBtn: getEl('sendBtn'),
             statusEl: getEl('status'),
             keyWarning: getEl('key-warning'),
-            modelSelect: getEl('modelSelect'),
             clearChatBtn: getEl('clearChatBtn'),
             apiKeyInput: getEl('apiKeyInput'),
             saveKeyBtn: getEl('saveKeyBtn'),
@@ -125,10 +124,6 @@ class NemotronApp {
         }
 
         // Sidebar Actions
-        this.elements.modelSelect?.addEventListener('change', (e) => {
-            this.state.currentModel = e.target.value;
-        });
-
         this.elements.clearChatBtn?.addEventListener('click', () => this.clearCurrentChat());
         this.elements.newChatBtn?.addEventListener('click', () => this.createNewChat());
         this.elements.saveKeyBtn?.addEventListener('click', () => this.saveApiKey());

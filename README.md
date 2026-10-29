@@ -11,7 +11,7 @@ Futuristische Chat-Oberfläche für das NVIDIA Nemotron Modell.
 
 - Reine HTML/CSS/JS Seite (kein Build nötig)
 - NVIDIA API: `https://integrate.api.nvidia.com/v1/chat/completions`
-- Modell: `nvidia/nemotron-4-340b-instruct`
+- Modell: `nvidia/nemotron-3-ultra-550b-a55b`
 
 ## Hinweis
 
