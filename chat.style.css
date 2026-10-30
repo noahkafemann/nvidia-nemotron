@@ -238,7 +238,7 @@ main {
   flex: 1;
   display: flex;
   flex-direction: column;
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
   width: 100%;
   position: relative;
@@ -579,10 +579,10 @@ main {
 }
 
 .msg.user .avatar { background: var(--accent-dim); color: #fff; box-shadow: 0 0 15px var(--accent-dim-glow); }
-.msg.assistant .avatar { background: linear-gradient(135deg, var(--secondary), var(--accent)); color: #fff; box-shadow: 0 0 15px var(--secondary-glow); }
+.msg.assistant .avatar { background: radial-gradient(circle at 30% 30%, #00ffff, #ff00ff); color: #fff; font-weight: 900; text-shadow: 0 0 8px #fff, 0 0 16px #00ffff; box-shadow: 0 0 20px #ff00ff, 0 0 40px #00ffff; }
 
 .bubble {
-  max-width: 70%;
+  max-width: 85%;
   padding: 0.9rem 1.2rem;
   border-radius: 1.2rem;
   background: var(--glass);
