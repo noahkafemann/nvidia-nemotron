@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nemotron Chat</title>
-  <link rel="stylesheet" href="chat.style.css?v=4">
+  <link rel="stylesheet" href="chat.style.css?v=5">
 </head>
 <body>
   <script>
@@ -115,6 +115,7 @@
               <div class="pulse-metric" title="Geschätzte Kontextauslastung (128k)"><span>Kontext</span><strong id="pulseContext">0%</strong></div>
             </div>
             <canvas id="pulseSpark" class="pulse-spark" width="220" height="34"></canvas>
+            <button id="xrayBtn" class="pulse-xray" type="button" title="Model X-Ray öffnen">X-Ray</button>
             <button id="pulseToggle" class="pulse-toggle" type="button" title="Pulse ein-/ausblenden">&#8722;</button>
             <div class="pulse-context"><div id="pulseContextFill" class="pulse-context-fill"></div></div>
           </div>
@@ -201,6 +202,83 @@
     </div>
   </div>
 
-  <script src="chat.js?v=4"></script>
+  <div id="xrayModal" class="xray-modal" style="display: none;">
+    <div class="xray-dialog" role="dialog" aria-modal="true" aria-labelledby="xrayTitle">
+      <div class="xray-header">
+        <div>
+          <h2 id="xrayTitle">Model X-Ray</h2>
+          <p class="xray-sub">Live-Einblick in Prompt, Stream, Timing und Token-Verhalten.</p>
+        </div>
+        <div class="xray-header-actions">
+          <span id="xrayStatus" class="xray-status">Bereit</span>
+          <button id="xrayClose" class="spark-close" type="button" title="Schließen">&#215;</button>
+        </div>
+      </div>
+
+      <div id="xrayPipeline" class="xray-pipeline">
+        <div class="xray-stage" data-stage="prompt"><span class="xray-stage-dot"></span><span>Prompt</span><em id="xrayPromptTime">&#8211;</em></div>
+        <div class="xray-stage" data-stage="request"><span class="xray-stage-dot"></span><span>Request</span><em id="xrayRequestTime">&#8211;</em></div>
+        <div class="xray-stage" data-stage="first"><span class="xray-stage-dot"></span><span>Erstes Token</span><em id="xrayFirstTime">&#8211;</em></div>
+        <div class="xray-stage" data-stage="stream"><span class="xray-stage-dot"></span><span>Stream</span><em id="xrayStreamTime">&#8211;</em></div>
+        <div class="xray-stage" data-stage="done"><span class="xray-stage-dot"></span><span>Fertig</span><em id="xrayDoneTime">&#8211;</em></div>
+      </div>
+
+      <div class="xray-grid">
+        <section class="xray-card">
+          <h3>Request</h3>
+          <div id="xrayRequestMeta" class="xray-meta">Noch kein Request.</div>
+        </section>
+        <section class="xray-card">
+          <h3>Usage &amp; Finish</h3>
+          <div id="xrayUsage" class="xray-meta">Noch keine Daten.</div>
+        </section>
+      </div>
+
+      <section id="xrayReasoningCard" class="xray-card" style="display: none;">
+        <div class="xray-card-head">
+          <h3>Reasoning-Stream</h3>
+          <span class="xray-hint">Vom Modell bereitgestellte Zwischenschritte</span>
+        </div>
+        <div id="xrayReasoning" class="xray-reasoning"></div>
+      </section>
+
+      <section class="xray-card">
+        <div class="xray-card-head">
+          <h3>Stream-Ereignisse</h3>
+          <span id="xrayEventCount" class="xray-count">0</span>
+        </div>
+        <div id="xrayEvents" class="xray-events">
+          <div class="xray-empty">Sende eine Nachricht, um den Stream zu sehen.</div>
+        </div>
+      </section>
+
+      <section class="xray-card">
+        <div class="xray-card-head">
+          <h3>Token-Heatmap</h3>
+          <span class="xray-hint">Farbe = Verzögerung zwischen Chunks</span>
+        </div>
+        <div id="xrayHeatmap" class="xray-heatmap"></div>
+      </section>
+
+      <section class="xray-card">
+        <div class="xray-card-head">
+          <h3>System-Prompt</h3>
+        </div>
+        <pre id="xraySystemPrompt" class="xray-pre"></pre>
+      </section>
+
+      <details class="xray-card xray-raw">
+        <summary>Rohdaten &amp; Export</summary>
+        <div class="xray-raw-actions">
+          <button id="xrayCopyRequest" type="button">Request kopieren</button>
+          <button id="xrayCopyStream" type="button">Stream kopieren</button>
+          <button id="xrayExport" type="button">JSON exportieren</button>
+        </div>
+        <pre id="xrayRaw" class="xray-pre">Noch keine Rohdaten.</pre>
+      </details>
+    </div>
+  </div>
+
+  <script src="chat.js?v=5"></script>
 </body>
 </html>

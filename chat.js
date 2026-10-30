@@ -28,17 +28,43 @@ const SPARKS = [
     { tag: 'Perspektive', text: 'Diskutiere [These] aus Sicht von [Person A] und [Person B]. Fasse am Ende den stärksten Einwand zusammen.' }
 ];
 
+const SYSTEM_PROMPT = `Du bist Nemotron, ein hilfreicher KI-Assistent von NVIDIA.
+Antworte standardmäßig auf Deutsch, sofern der Nutzer keine andere Sprache verwendet.
+Formatiere deine Antworten immer mit Markdown:
+- **fett** für wichtige Begriffe
+- *kursiv* für Betonungen
+- \`inline code\` für Code, Befehle und Dateinamen
+- Fenced Code Blocks mit Sprachangabe für mehrzeiligen Code
+- Überschriften, Listen, Tabellen und Blockquotes, wenn sie die Lesbarkeit verbessern
+- Keine HTML-Tags
+Strukturiere längere Antworten mit kurzen Abschnitten. Sei präzise, ehrlich und hilfreich.`;
+
 class NemotronApp {
     constructor() {
         this.state = {
-            history: [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron. Antworte auf Deutsch, sofern nicht anders gewünscht.' }],
+            history: [{ role: 'system', content: SYSTEM_PROMPT }],
             currentChatId: null,
             chats: [],
             isStreaming: true,
             temperature: 0.7,
             maxTokens: 1024,
             isTyping: false,
-            pulse: { live: false, start: 0, firstToken: 0, chunks: 0, samples: [] }
+            pulse: { live: false, start: 0, firstToken: 0, chunks: 0, samples: [] },
+            trace: {
+                status: 'idle',
+                request: null,
+                startedAt: 0,
+                promptMs: 0,
+                requestAt: 0,
+                firstTokenAt: 0,
+                finishedAt: 0,
+                events: [],
+                usage: null,
+                finishReason: null,
+                error: null,
+                reasoning: '',
+                fullReply: ''
+            }
         };
 
         this.elements = {};
@@ -122,7 +148,29 @@ class NemotronApp {
             sparkModal: getEl('sparkModal'),
             sparkClose: getEl('sparkClose'),
             sparkList: getEl('sparkList'),
-            sparkRandom: getEl('sparkRandom')
+            sparkRandom: getEl('sparkRandom'),
+            xrayBtn: getEl('xrayBtn'),
+            xrayModal: getEl('xrayModal'),
+            xrayClose: getEl('xrayClose'),
+            xrayStatus: getEl('xrayStatus'),
+            xrayPipeline: getEl('xrayPipeline'),
+            xrayPromptTime: getEl('xrayPromptTime'),
+            xrayRequestTime: getEl('xrayRequestTime'),
+            xrayFirstTime: getEl('xrayFirstTime'),
+            xrayStreamTime: getEl('xrayStreamTime'),
+            xrayDoneTime: getEl('xrayDoneTime'),
+            xrayRequestMeta: getEl('xrayRequestMeta'),
+            xrayUsage: getEl('xrayUsage'),
+            xrayReasoningCard: getEl('xrayReasoningCard'),
+            xrayReasoning: getEl('xrayReasoning'),
+            xrayEventCount: getEl('xrayEventCount'),
+            xrayEvents: getEl('xrayEvents'),
+            xrayHeatmap: getEl('xrayHeatmap'),
+            xraySystemPrompt: getEl('xraySystemPrompt'),
+            xrayRaw: getEl('xrayRaw'),
+            xrayCopyRequest: getEl('xrayCopyRequest'),
+            xrayCopyStream: getEl('xrayCopyStream'),
+            xrayExport: getEl('xrayExport')
         };
     }
 
@@ -159,7 +207,7 @@ class NemotronApp {
 
         this.elements.themeSelect?.addEventListener('change', (e) => this.applyTheme(e.target.value));
 
-        // Nemotron Pulse + Ideen-Schmiede
+        // Nemotron Pulse, Ideen-Schmiede + Model X-Ray
         this.elements.pulseToggle?.addEventListener('click', () => this.togglePulse());
         this.elements.sparkBtn?.addEventListener('click', () => this.openSparks());
         this.elements.sparkClose?.addEventListener('click', () => this.closeSparks());
@@ -167,9 +215,35 @@ class NemotronApp {
         this.elements.sparkModal?.addEventListener('click', (e) => {
             if (e.target === this.elements.sparkModal) this.closeSparks();
         });
+        this.elements.xrayBtn?.addEventListener('click', () => this.openXray());
+        this.elements.xrayClose?.addEventListener('click', () => this.closeXray());
+        this.elements.xrayModal?.addEventListener('click', (e) => {
+            if (e.target === this.elements.xrayModal) this.closeXray();
+        });
+        this.elements.xrayCopyRequest?.addEventListener('click', () => this.copyXrayRequest());
+        this.elements.xrayCopyStream?.addEventListener('click', () => this.copyXrayStream());
+        this.elements.xrayExport?.addEventListener('click', () => this.exportXray());
+        this.elements.messagesEl?.addEventListener('click', (e) => {
+            const button = e.target.closest('.code-copy');
+            if (!button) return;
+            const code = button.closest('.code-block')?.querySelector('code')?.textContent || '';
+            this.copyText(code).then(() => {
+                button.textContent = 'Kopiert';
+                setTimeout(() => { button.textContent = 'Kopieren'; }, 1200);
+            });
+        });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.elements.sparkModal && this.elements.sparkModal.style.display !== 'none') {
-                this.closeSparks();
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'x') {
+                e.preventDefault();
+                this.openXray();
+                return;
+            }
+            if (e.key === 'Escape') {
+                if (this.elements.xrayModal && this.elements.xrayModal.style.display !== 'none') {
+                    this.closeXray();
+                } else if (this.elements.sparkModal && this.elements.sparkModal.style.display !== 'none') {
+                    this.closeSparks();
+                }
             }
         });
 
@@ -434,6 +508,331 @@ class NemotronApp {
         if (spark) this.useSpark(spark.text);
     }
 
+    resetTrace() {
+        this.state.trace = {
+            status: 'idle',
+            request: null,
+            startedAt: 0,
+            promptMs: 0,
+            requestAt: 0,
+            firstTokenAt: 0,
+            finishedAt: 0,
+            events: [],
+            usage: null,
+            finishReason: null,
+            error: null,
+            reasoning: '',
+            fullReply: ''
+        };
+        this.scheduleXrayUpdate();
+    }
+
+    beginTrace(request, promptStartedAt) {
+        const now = performance.now();
+        this.state.trace = {
+            status: 'requesting',
+            request,
+            startedAt: now,
+            promptMs: Math.max(0, now - promptStartedAt),
+            requestAt: 0,
+            firstTokenAt: 0,
+            finishedAt: 0,
+            events: [],
+            usage: null,
+            finishReason: null,
+            error: null,
+            reasoning: '',
+            fullReply: ''
+        };
+        this.scheduleXrayUpdate();
+    }
+
+    markTraceRequest() {
+        const trace = this.state.trace;
+        if (!trace.startedAt) return;
+        trace.requestAt = performance.now();
+        trace.status = 'streaming';
+        this.scheduleXrayUpdate();
+    }
+
+    traceChunk({ delta = '', reasoning = '', raw = '', usage = null, finishReason = null }) {
+        const trace = this.state.trace;
+        if (!trace.startedAt) return;
+
+        const now = performance.now();
+        if ((delta || reasoning) && !trace.firstTokenAt) trace.firstTokenAt = now;
+        if (delta) trace.fullReply += delta;
+        if (reasoning) trace.reasoning += reasoning;
+        if (usage) trace.usage = usage;
+        if (finishReason) trace.finishReason = finishReason;
+
+        trace.events.push({
+            offset: Math.max(0, now - trace.startedAt),
+            delta,
+            reasoning,
+            raw: String(raw || '').slice(0, 4000),
+            usage,
+            finishReason
+        });
+        if (trace.events.length > 200) trace.events.shift();
+        this.scheduleXrayUpdate();
+    }
+
+    finishTrace(status = 'done', error = null) {
+        const trace = this.state.trace;
+        if (!trace.startedAt || trace.finishedAt) return;
+        trace.finishedAt = performance.now();
+        trace.status = status;
+        trace.error = error;
+        this.scheduleXrayUpdate();
+    }
+
+    scheduleXrayUpdate() {
+        if (!this.elements.xrayModal || this.elements.xrayModal.style.display === 'none') return;
+        if (this.xrayRaf) return;
+        this.xrayRaf = requestAnimationFrame(() => {
+            this.xrayRaf = null;
+            this.renderXray();
+        });
+    }
+
+    openXray() {
+        if (!this.elements.xrayModal) return;
+        this.elements.xrayModal.style.display = 'flex';
+        this.renderXray();
+        this.elements.xrayClose?.focus();
+    }
+
+    closeXray() {
+        if (this.elements.xrayModal) this.elements.xrayModal.style.display = 'none';
+        this.elements.xrayBtn?.focus();
+    }
+
+    renderXray() {
+        if (!this.elements.xrayModal || this.elements.xrayModal.style.display === 'none') return;
+
+        const trace = this.state.trace;
+        const now = performance.now();
+        const labels = {
+            idle: 'Bereit',
+            requesting: 'Warte auf Antwort',
+            streaming: 'Streaming',
+            done: 'Abgeschlossen',
+            error: 'Fehler'
+        };
+
+        if (this.elements.xrayStatus) {
+            const statusClass = trace.status === 'requesting' || trace.status === 'streaming'
+                ? ' live'
+                : trace.status === 'done'
+                    ? ' success'
+                    : trace.status === 'error'
+                        ? ' error'
+                        : '';
+            this.elements.xrayStatus.className = 'xray-status' + statusClass;
+            this.elements.xrayStatus.textContent = labels[trace.status] || trace.status;
+        }
+
+        const formatMs = (value) => value >= 0 ? `${Math.round(value)} ms` : '\u2013';
+        const setStage = (name, state, timeText) => {
+            const stage = this.elements.xrayPipeline?.querySelector(`[data-stage="${name}"]`);
+            if (!stage) return;
+            stage.classList.toggle('active', state === 'active');
+            stage.classList.toggle('done', state === 'done');
+            const time = stage.querySelector('em');
+            if (time) time.textContent = timeText;
+        };
+
+        const hasRequest = !!trace.request;
+        const requestStarted = trace.startedAt > 0;
+        const firstToken = trace.firstTokenAt > 0;
+        const finished = trace.finishedAt > 0;
+
+        setStage('prompt', hasRequest ? 'done' : 'idle', hasRequest ? formatMs(trace.promptMs) : '\u2013');
+        setStage(
+            'request',
+            trace.requestAt ? 'done' : (requestStarted && !finished ? 'active' : 'idle'),
+            trace.requestAt ? formatMs(trace.requestAt - trace.startedAt) : (requestStarted && !finished ? 'l\u00e4uft' : '\u2013')
+        );
+        setStage(
+            'first',
+            firstToken ? 'done' : (trace.requestAt && !finished ? 'active' : 'idle'),
+            firstToken ? formatMs(trace.firstTokenAt - trace.startedAt) : (trace.requestAt && !finished ? 'wartet' : '\u2013')
+        );
+        const streamEnd = finished ? trace.finishedAt : (trace.firstTokenAt || now);
+        setStage('stream', firstToken ? (finished ? 'done' : 'active') : 'idle', firstToken ? formatMs(streamEnd - trace.firstTokenAt) : '\u2013');
+        setStage('done', finished ? 'done' : 'idle', finished ? formatMs(trace.finishedAt - trace.startedAt) : '\u2013');
+
+        if (this.elements.xrayRequestMeta) {
+            if (!trace.request) {
+                this.elements.xrayRequestMeta.textContent = 'Noch kein Request.';
+            } else {
+                const request = trace.request;
+                const messages = Array.isArray(request.messages) ? request.messages : [];
+                const promptChars = messages.reduce((sum, message) => sum + String(message.content || '').length, 0);
+                const promptTokens = Math.round(promptChars / 4);
+                const rows = [
+                    ['Modell', request.model || '\u2013'],
+                    ['Temperatur', request.temperature ?? '\u2013'],
+                    ['Max Tokens', request.max_tokens ?? '\u2013'],
+                    ['Streaming', request.stream ? 'Ja' : 'Nein'],
+                    ['Nachrichten', messages.length],
+                    ['Prompt-Tokens', `~${promptTokens}`],
+                    ['Kontext', `${Math.min(100, (promptTokens / CONFIG.CONTEXT_WINDOW) * 100).toFixed(1)}%`]
+                ];
+                this.elements.xrayRequestMeta.innerHTML = rows
+                    .map(([key, value]) => `<span>${this.escapeHtml(String(key))}</span><span>${this.escapeHtml(String(value))}</span>`)
+                    .join('');
+            }
+        }
+
+        if (this.elements.xrayUsage) {
+            if (!trace.usage && !trace.finishReason && !trace.error) {
+                this.elements.xrayUsage.textContent = trace.request
+                    ? 'Usage wird nach Abschluss angezeigt (bei Streaming ggf. gesch\u00e4tzt).'
+                    : 'Noch keine Daten.';
+            } else {
+                const usage = trace.usage || {};
+                const messages = Array.isArray(trace.request?.messages) ? trace.request.messages : [];
+                const promptTokens = usage.prompt_tokens ?? Math.round(messages.reduce((sum, message) => sum + String(message.content || '').length, 0) / 4);
+                const completionTokens = usage.completion_tokens ?? Math.round(trace.fullReply.length / 4);
+                const totalTokens = usage.total_tokens ?? (promptTokens + completionTokens);
+                const rows = [
+                    ['Prompt-Tokens', usage.prompt_tokens != null ? usage.prompt_tokens : `~${promptTokens}`],
+                    ['Completion-Tokens', usage.completion_tokens != null ? usage.completion_tokens : `~${completionTokens}`],
+                    ['Gesamt', usage.total_tokens != null ? usage.total_tokens : `~${totalTokens}`],
+                    ['Finish Reason', trace.finishReason || '\u2013']
+                ];
+                if (trace.error) rows.push(['Fehler', trace.error]);
+                this.elements.xrayUsage.innerHTML = rows
+                    .map(([key, value]) => `<span>${this.escapeHtml(String(key))}</span><span>${this.escapeHtml(String(value))}</span>`)
+                    .join('');
+            }
+        }
+
+        if (this.elements.xrayReasoningCard) {
+            this.elements.xrayReasoningCard.style.display = trace.reasoning ? 'block' : 'none';
+        }
+        if (this.elements.xrayReasoning) {
+            this.elements.xrayReasoning.textContent = trace.reasoning;
+        }
+
+        if (this.elements.xrayEventCount) {
+            this.elements.xrayEventCount.textContent = String(trace.events.length);
+        }
+        if (this.elements.xrayEvents) {
+            const eventsEl = this.elements.xrayEvents;
+            const nearBottom = eventsEl.scrollHeight - eventsEl.scrollTop - eventsEl.clientHeight < 60;
+            if (!trace.events.length) {
+                eventsEl.innerHTML = '<div class="xray-empty">Sende eine Nachricht, um den Stream zu sehen.</div>';
+            } else {
+                eventsEl.innerHTML = trace.events.slice(-80).map(event => {
+                    const type = event.delta ? 'token' : event.reasoning ? 'reasoning' : 'meta';
+                    const preview = String(event.delta || event.reasoning || (event.usage ? 'usage' : '')).replace(/\s+/g, ' ').slice(0, 160);
+                    const size = event.delta
+                        ? `${event.delta.length} Z.`
+                        : event.reasoning
+                            ? `${event.reasoning.length} Z.`
+                            : 'meta';
+                    return `<div class="xray-event"><span class="xray-event-time">+${Math.round(event.offset)} ms</span><span class="xray-event-type">${type}</span><span class="xray-event-preview">${this.escapeHtml(preview) || '&nbsp;'}</span><span class="xray-event-size">${size}</span></div>`;
+                }).join('');
+                if (nearBottom) eventsEl.scrollTop = eventsEl.scrollHeight;
+            }
+        }
+
+        if (this.elements.xrayHeatmap) {
+            const tokenEvents = trace.events.filter(event => event.delta || event.reasoning);
+            if (!tokenEvents.length) {
+                this.elements.xrayHeatmap.innerHTML = '<span class="xray-empty">Noch keine Token-Daten.</span>';
+            } else {
+                let previous = 0;
+                const tokens = tokenEvents.map(event => {
+                    const delay = Math.max(0, event.offset - previous);
+                    previous = event.offset;
+                    return { event, delay };
+                });
+                this.elements.xrayHeatmap.innerHTML = tokens.slice(-160).map(({ event, delay }) => {
+                    const delayClass = delay > 180 ? ' slow' : delay > 70 ? ' medium' : '';
+                    const reasoningClass = event.reasoning ? ' reasoning' : '';
+                    const text = event.delta || event.reasoning;
+                    const title = `+${Math.round(event.offset)} ms \u00b7 ${text.length} Zeichen \u00b7 ${Math.round(delay)} ms seit letztem Chunk`;
+                    return `<span class="xray-token${reasoningClass}${delayClass}" title="${this.escapeAttr(title)}"></span>`;
+                }).join('');
+                this.elements.xrayHeatmap.scrollLeft = this.elements.xrayHeatmap.scrollWidth;
+            }
+        }
+
+        if (this.elements.xraySystemPrompt) {
+            this.elements.xraySystemPrompt.textContent = SYSTEM_PROMPT;
+        }
+
+        if (this.elements.xrayRaw) {
+            if (!trace.request) {
+                this.elements.xrayRaw.textContent = 'Noch keine Rohdaten.';
+            } else {
+                const raw = {
+                    request: trace.request,
+                    timing: {
+                        promptMs: trace.promptMs,
+                        requestMs: trace.requestAt ? trace.requestAt - trace.startedAt : null,
+                        firstTokenMs: trace.firstTokenAt ? trace.firstTokenAt - trace.startedAt : null,
+                        totalMs: trace.finishedAt ? trace.finishedAt - trace.startedAt : null
+                    },
+                    usage: trace.usage,
+                    finishReason: trace.finishReason,
+                    error: trace.error,
+                    events: trace.events.slice(-50).map(event => ({
+                        offset: event.offset,
+                        delta: event.delta,
+                        reasoning: event.reasoning,
+                        raw: event.raw
+                    }))
+                };
+                const text = JSON.stringify(raw, null, 2);
+                this.elements.xrayRaw.textContent = text.length > 20000 ? `${text.slice(0, 20000)}\n\u2026` : text;
+            }
+        }
+    }
+
+    async copyText(text) {
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                document.execCommand('copy');
+                area.remove();
+            }
+            this.setStatus('In Zwischenablage kopiert', 'success');
+        } catch (e) {
+            console.error('Copy error', e);
+            this.setStatus('Kopieren fehlgeschlagen', 'error');
+        }
+    }
+
+    copyXrayRequest() {
+        this.copyText(JSON.stringify(this.state.trace.request || {}, null, 2));
+    }
+
+    copyXrayStream() {
+        this.copyText(this.state.trace.events.map(event => event.raw).join('\n'));
+    }
+
+    exportXray() {
+        const blob = new Blob([JSON.stringify(this.state.trace, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `nemotron-xray-${Date.now()}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
     switchView(view) {
         console.log(`Switching to view: ${view}`);
         if (view === 'history') this.loadChatList();
@@ -465,9 +864,19 @@ class NemotronApp {
         this.setTypingState(true);
         this.startPulse();
 
+        const promptStartedAt = performance.now();
         this.addMessage('user', text);
         this.state.history.push({ role: 'user', content: text });
         this.updateContextMeter();
+
+        const payload = {
+            model: CONFIG.DEFAULT_MODEL,
+            messages: this.state.history.map(message => ({ role: message.role, content: message.content })),
+            temperature: this.state.temperature,
+            max_tokens: this.state.maxTokens,
+            stream: this.state.isStreaming
+        };
+        this.beginTrace(payload, promptStartedAt);
 
         const assistantMsg = this.addMessage('assistant', '', true);
         const bubble = assistantMsg.querySelector('.bubble');
@@ -477,15 +886,10 @@ class NemotronApp {
             const response = await fetch(`${CONFIG.PROXY_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: CONFIG.DEFAULT_MODEL,
-                    messages: this.state.history,
-                    temperature: this.state.temperature,
-                    max_tokens: this.state.maxTokens,
-                    stream: this.state.isStreaming
-                }),
+                body: JSON.stringify(payload),
                 signal: this.streamController.signal
             });
+            this.markTraceRequest();
 
             if (!response.ok) throw new Error(`Server Error: ${response.status}`);
 
@@ -523,21 +927,42 @@ class NemotronApp {
                         if (parsed.error) throw new Error(parsed.error);
 
                         const delta = parsed.choices?.[0]?.delta?.content || '';
+                        const reasoningDelta = parsed.choices?.[0]?.delta?.reasoning_content || parsed.choices?.[0]?.delta?.reasoning || '';
+                        const finishReason = parsed.choices?.[0]?.finish_reason || null;
+                        this.traceChunk({
+                            delta,
+                            reasoning: reasoningDelta,
+                            raw: data,
+                            usage: parsed.usage || null,
+                            finishReason
+                        });
+
                         if (delta) {
                             fullReply += delta;
                             this.pulseOnChunk();
                             bubble.innerHTML = this.renderMarkdown(fullReply) + '<span class="stream-cursor"></span>';
                             this.scrollToBottom();
+                        } else if (reasoningDelta && !fullReply) {
+                            bubble.innerHTML = '<span class="thinking-label">Reasoning-Stream aktiv \u2026</span>';
                         }
                     }
                 }
             } else {
                 const data = await response.json();
                 if (data.error) throw new Error(data.error);
+                const reasoning = data.choices?.[0]?.message?.reasoning_content || data.choices?.[0]?.message?.reasoning || '';
                 fullReply = data.choices?.[0]?.message?.content || '';
+                this.traceChunk({
+                    delta: fullReply,
+                    reasoning,
+                    raw: JSON.stringify(data),
+                    usage: data.usage || null,
+                    finishReason: data.choices?.[0]?.finish_reason || null
+                });
                 this.pulseOnChunk(Math.max(1, Math.round(fullReply.length / 4)));
             }
 
+            this.finishTrace('done');
             bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');
             this.state.history.push({ role: 'assistant', content: fullReply });
             if (fullReply) this.addBranchButton(bubble, this.state.history.length - 1);
@@ -551,6 +976,7 @@ class NemotronApp {
 
             this.setStatus('Bereit');
         } catch (err) {
+            this.finishTrace('error', err.name === 'AbortError' ? 'Abgebrochen' : err.message);
             if (err.name === 'AbortError') {
                 this.setStatus('Abgebrochen');
             } else {
@@ -558,6 +984,7 @@ class NemotronApp {
                 this.setStatus('Fehler', 'error');
             }
         } finally {
+            this.finishTrace('done');
             this.finishPulse();
             this.setTypingState(false);
             this.scrollToBottom();
@@ -764,6 +1191,7 @@ class NemotronApp {
         this.state.currentChatId = id;
         this.updateActiveChat();
         this.switchView('chat');
+        this.resetTrace();
 
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats/${id}/messages`, {
@@ -773,7 +1201,7 @@ class NemotronApp {
             const messages = await response.json();
 
             this.elements.messagesEl.innerHTML = '';
-            this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+            this.state.history = [{ role: 'system', content: SYSTEM_PROMPT }];
 
             messages.forEach(m => {
                 this.addMessage(m.role, m.content);
@@ -791,8 +1219,9 @@ class NemotronApp {
     createNewChat() {
         this.state.currentChatId = null;
         this.updateActiveChat();
+        this.resetTrace();
         this.elements.messagesEl.innerHTML = '';
-        this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+        this.state.history = [{ role: 'system', content: SYSTEM_PROMPT }];
         this.addMessage('assistant', 'Hallo! Ich bin ein neuer Chat. Wie kann ich dir helfen?', false, false);
         this.resetPulse();
         this.switchView('chat');
@@ -801,9 +1230,10 @@ class NemotronApp {
     clearCurrentChat() {
         if (!confirm('Möchtest du diesen Chat wirklich leeren?')) return;
         this.elements.messagesEl.innerHTML = '';
-        this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+        this.state.history = [{ role: 'system', content: SYSTEM_PROMPT }];
         this.state.currentChatId = null;
         this.updateActiveChat();
+        this.resetTrace();
         this.addMessage('assistant', 'Chat geleert. Bereit für neue Fragen!', false, false);
         this.resetPulse();
     }
@@ -900,7 +1330,8 @@ class NemotronApp {
             }
 
             this.state.currentChatId = created.id;
-            this.state.history = [{ role: 'system', content: 'Du bist ein hilfreicher KI-Assistent von NVIDIA Nemotron.' }];
+            this.resetTrace();
+            this.state.history = [{ role: 'system', content: SYSTEM_PROMPT }];
             this.elements.messagesEl.innerHTML = '';
             messages.forEach(message => {
                 this.addMessage(message.role, message.content);
@@ -924,9 +1355,12 @@ class NemotronApp {
         div.className = 'msg ' + role;
         const avatar = role === 'user' ? '&#128101;' : '&#128169;';
         const historyIndex = this.state.history.length;
+        const rendered = typing
+            ? '<span class="stream-cursor"></span>'
+            : (role === 'assistant' ? this.renderMarkdown(content) : this.escapeHtml(content));
         div.innerHTML = `
             <div class="avatar">${avatar}</div>
-            <div class="bubble${typing ? ' typing' : ''}">${typing ? '<span class="stream-cursor"></span>' : this.escapeHtml(content)}</div>
+            <div class="bubble${typing ? ' typing' : ''}">${rendered}</div>
         `;
 
         const bubble = div.querySelector('.bubble');
@@ -945,20 +1379,206 @@ class NemotronApp {
         return d.innerHTML;
     }
 
+    escapeAttr(str) {
+        return this.escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    sanitizeUrl(url) {
+        const trimmed = String(url).trim();
+        if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed;
+        return '';
+    }
+
+    renderInline(text) {
+        if (!text) return '';
+        const tokens = [];
+        const stash = (html) => {
+            const key = `\uE000${tokens.length}\uE001`;
+            tokens.push(html);
+            return key;
+        };
+
+        let working = String(text);
+        working = working.replace(/`([^`\n]+)`/g, (_, code) => stash(`<code>${this.escapeHtml(code)}</code>`));
+        working = working.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
+            const safeUrl = this.sanitizeUrl(url);
+            if (!safeUrl) return stash(this.escapeHtml(label));
+            return stash(`<a href="${this.escapeAttr(safeUrl)}" target="_blank" rel="noopener noreferrer">${this.renderInline(label)}</a>`);
+        });
+
+        working = this.escapeHtml(working);
+        working = working.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        working = working.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+        working = working.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+        working = working.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+        working = working.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>');
+        working = working.replace(/\uE000(\d+)\uE001/g, (_, index) => tokens[Number(index)] || '');
+        return working.replace(/\n/g, '<br>');
+    }
+
+    parseTableRow(line) {
+        let trimmed = String(line).trim();
+        if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+        if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+
+        const cells = [];
+        let current = '';
+        let escaped = false;
+        for (const char of trimmed) {
+            if (escaped) {
+                current += char;
+                escaped = false;
+                continue;
+            }
+            if (char === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (char === '|') {
+                cells.push(current.trim());
+                current = '';
+                continue;
+            }
+            current += char;
+        }
+        cells.push(current.trim());
+        return cells;
+    }
+
+    parseTableAlign(line) {
+        return this.parseTableRow(line).map(cell => {
+            const left = cell.startsWith(':');
+            const right = cell.endsWith(':');
+            if (left && right) return 'center';
+            if (right) return 'right';
+            if (left) return 'left';
+            return '';
+        });
+    }
+
+    renderTable(header, align, rows) {
+        const cell = (tag, value, index) => {
+            const alignment = align[index] ? ` style="text-align:${align[index]}"` : '';
+            return `<${tag}${alignment}>${this.renderInline(value || '')}</${tag}>`;
+        };
+        const head = `<thead><tr>${header.map((value, index) => cell('th', value, index)).join('')}</tr></thead>`;
+        const body = rows.length
+            ? `<tbody>${rows.map(row => `<tr>${header.map((_, index) => cell('td', row[index] || '', index)).join('')}</tr>`).join('')}</tbody>`
+            : '';
+        return `<div class="table-wrap"><table>${head}${body}</table></div>`;
+    }
+
+    renderCodeBlock(code, lang) {
+        const language = String(lang || '').trim();
+        const label = language || 'Code';
+        return `<div class="code-block"><div class="code-head"><span class="code-lang">${this.escapeHtml(label)}</span><button type="button" class="code-copy">Kopieren</button></div><pre><code${language ? ` class="language-${this.escapeAttr(language)}"` : ''}>${this.escapeHtml(code)}</code></pre></div>`;
+    }
+
     renderMarkdown(text) {
         if (!text) return '';
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\n\n+/g, '<br><br>')
-            .replace(/\n/g, '<br>');
+
+        const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+        const html = [];
+        let paragraphLines = [];
+
+        const flushParagraph = () => {
+            if (!paragraphLines.length) return;
+            html.push(`<p>${this.renderInline(paragraphLines.join('\n'))}</p>`);
+            paragraphLines = [];
+        };
+
+        let index = 0;
+        while (index < lines.length) {
+            const line = lines[index];
+
+            if (!line.trim()) {
+                flushParagraph();
+                index++;
+                continue;
+            }
+
+            const fence = line.match(/^```\s*([\w-]*)\s*$/);
+            if (fence) {
+                flushParagraph();
+                const language = fence[1];
+                const codeLines = [];
+                index++;
+                while (index < lines.length && !/^```\s*$/.test(lines[index])) {
+                    codeLines.push(lines[index]);
+                    index++;
+                }
+                if (index < lines.length) index++;
+                html.push(this.renderCodeBlock(codeLines.join('\n'), language));
+                continue;
+            }
+
+            const heading = line.match(/^(#{1,6})\s+(.*)$/);
+            if (heading) {
+                flushParagraph();
+                const level = heading[1].length;
+                html.push(`<h${level}>${this.renderInline(heading[2].trim())}</h${level}>`);
+                index++;
+                continue;
+            }
+
+            if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+                flushParagraph();
+                html.push('<hr>');
+                index++;
+                continue;
+            }
+
+            if (/^\s*>/.test(line)) {
+                flushParagraph();
+                const quoteLines = [];
+                while (index < lines.length && /^\s*>/.test(lines[index])) {
+                    quoteLines.push(lines[index].replace(/^\s*>\s?/, ''));
+                    index++;
+                }
+                html.push(`<blockquote>${this.renderMarkdown(quoteLines.join('\n'))}</blockquote>`);
+                continue;
+            }
+
+            const ordered = /^\s*\d+\.\s+/.test(line);
+            const unordered = /^\s*[-*+]\s+/.test(line);
+            if (ordered || unordered) {
+                flushParagraph();
+                const pattern = ordered ? /^\s*\d+\.\s+(.*)$/ : /^\s*[-*+]\s+(.*)$/;
+                const items = [];
+                while (index < lines.length) {
+                    const item = lines[index].match(pattern);
+                    if (!item) break;
+                    items.push(item[1]);
+                    index++;
+                }
+                const tag = ordered ? 'ol' : 'ul';
+                html.push(`<${tag}>${items.map(item => `<li>${this.renderInline(item)}</li>`).join('')}</${tag}>`);
+                continue;
+            }
+
+            const nextLine = lines[index + 1] || '';
+            const isTable = line.includes('|') && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(nextLine);
+            if (isTable) {
+                flushParagraph();
+                const header = this.parseTableRow(line);
+                const align = this.parseTableAlign(nextLine);
+                index += 2;
+                const rows = [];
+                while (index < lines.length && lines[index].trim() && lines[index].includes('|')) {
+                    rows.push(this.parseTableRow(lines[index]));
+                    index++;
+                }
+                html.push(this.renderTable(header, align, rows));
+                continue;
+            }
+
+            paragraphLines.push(line);
+            index++;
+        }
+
+        flushParagraph();
+        return html.join('');
     }
 
     scrollToBottom() {

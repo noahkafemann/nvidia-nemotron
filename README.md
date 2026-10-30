@@ -10,6 +10,8 @@ Futuristische Chat-Oberfläche für das NVIDIA Nemotron Modell.
 ## Features
 
 - **Nemotron Pulse**: Live-Telemetrie mit TTFT, Tokens pro Sekunde, Token-Zähler, Kontextauslastung und Sparkline.
+- **Model X-Ray**: Live-Einblick in System-Prompt, Request-Parameter, Streaming-Ereignisse, Reasoning-Stream, Token-Heatmap, Timing-Pipeline und Usage inklusive Copy-/JSON-Export (auch per `Strg/Cmd + Shift + X`).
+- **Markdown-Ausgaben**: Zentraler System-Prompt und sicherer Renderer für Fett, Kursiv, Listen, Tabellen, Blockquotes und Codeblöcke mit Copy-Button.
 - **Conversation Branching**: Jede Assistant-Antwort lässt sich per Branch-Button als eigener Chat fortführen.
 - **Ideen-Schmiede**: Kuratierte Prompt-Impulse mit Kategorien und Zufallsgenerator.
 - **6 Themes**: Futuristisch, Klassisch, Neon Night, Deep Ocean, Sunset Glow und Emerald Forest.
