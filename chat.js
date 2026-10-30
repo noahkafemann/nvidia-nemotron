@@ -1019,7 +1019,7 @@ class NemotronApp {
     }
 
     async autoSaveChat(firstReply) {
-        const title = this.state.history[1]?.content.substring(0, 30) || 'Neuer Chat';
+        const title = (firstReply || 'Neuer Chat').substring(0, 40);
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats`, {
                 method: 'POST',
