@@ -29,8 +29,7 @@ const SPARKS = [
 ];
 
 const SYSTEM_PROMPT = `Du bist Nemotron, ein hilfreicher KI-Assistent von NVIDIA.
-Antworte standardmaessig auf Deutsch.
-Beginne deine erste Antwort mit einer Zeile TITLE: <kurzer Titel> und danach Leerzeile.
+Antworte standardmäßig auf Deutsch, sofern der Nutzer keine andere Sprache verwendet.
 Formatiere deine Antworten immer mit Markdown:
 - **fett** für wichtige Begriffe
 - *kursiv* für Betonungen
@@ -986,7 +985,7 @@ class NemotronApp {
             }
 
             this.finishTrace('done');
-            const cleanReply = (fullReply||'').replace(/^TITLE:.*\n\n?/,''); bubble.innerHTML = this.renderMarkdown(cleanReply || 'Keine Antwort erhalten.');
+            bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');
             this.state.history.push({ role: 'assistant', content: fullReply });
             if (fullReply) this.addBranchButton(bubble, this.state.history.length - 1);
             this.updateContextMeter();
@@ -1020,7 +1019,7 @@ class NemotronApp {
     }
 
     async autoSaveChat(firstReply) {
-const m = (firstReply||'').match(/^TITLE:\s*(.+)/m); const title = (m ? m[1] : (firstReply||'Neuer Chat')).trim().substring(0,60);
+        const title = this.state.history[1]?.content.substring(0, 30) || 'Neuer Chat';
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats`, {
                 method: 'POST',
@@ -1032,7 +1031,7 @@ const m = (firstReply||'').match(/^TITLE:\s*(.+)/m); const title = (m ? m[1] : (
             });
             const data = await response.json();
             this.state.currentChatId = data.id;
-            const cleanReply2=(firstReply||'').replace(/^TITLE:.*\n\n?/,''); await this.saveMessageToHistory(cleanReply2);
+            await this.saveMessageToHistory(firstReply);
             await this.loadChatList();
         } catch (e) {
             console.error('Failed to auto-save chat', e);
@@ -1381,7 +1380,7 @@ const m = (firstReply||'').match(/^TITLE:\s*(.+)/m); const title = (m ? m[1] : (
     addMessage(role, content, typing = false, branchable = true) {
         const div = document.createElement('div');
         div.className = 'msg ' + role;
-        const avatar = role === 'user' ? '&#128101;' : 'N';
+        const avatar = role === 'user' ? '&#128101;' : '&#128169;';
         const historyIndex = this.state.history.length;
         const rendered = typing
             ? '<span class="stream-cursor"></span>'
