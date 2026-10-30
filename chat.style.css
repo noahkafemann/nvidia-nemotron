@@ -1935,3 +1935,5 @@ body.theme-light .app-header h1 {
 }
 
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+@media (max-width: 600px) { .sidebar { display: none !important; } .chat-area { max-width: 100% !important; padding: 0.5rem; } .bubble { max-width: 95% !important; } .avatar { width: 28px; height: 28px; } }
