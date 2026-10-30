@@ -29,7 +29,8 @@ const SPARKS = [
 ];
 
 const SYSTEM_PROMPT = `Du bist Nemotron, ein hilfreicher KI-Assistent von NVIDIA.
-Antworte standardmäßig auf Deutsch, sofern der Nutzer keine andere Sprache verwendet.
+Antworte standardmaessig auf Deutsch.
+Beginne deine erste Antwort mit einer Zeile TITLE: <kurzer Titel> und danach Leerzeile.
 Formatiere deine Antworten immer mit Markdown:
 - **fett** für wichtige Begriffe
 - *kursiv* für Betonungen
@@ -985,7 +986,7 @@ class NemotronApp {
             }
 
             this.finishTrace('done');
-            bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');
+            const cleanReply = (fullReply||'').replace(/^TITLE:.*\n\n?/,''); bubble.innerHTML = this.renderMarkdown(cleanReply || 'Keine Antwort erhalten.');
             this.state.history.push({ role: 'assistant', content: fullReply });
             if (fullReply) this.addBranchButton(bubble, this.state.history.length - 1);
             this.updateContextMeter();
@@ -1019,7 +1020,7 @@ class NemotronApp {
     }
 
     async autoSaveChat(firstReply) {
-        const userMsg = this.state.history.find(m => m.role === 'user')?.content || '';
+const m = (firstReply||'').match(/^TITLE:\s*(.+)/m); const title = (m ? m[1] : (firstReply||'Neuer Chat')).trim().substring(0,60);
 const title = (userMsg + (firstReply ? ' → ' + firstReply : '')).replace(/\s+/g, ' ').trim().substring(0, 60) || 'Neuer Chat';
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats`, {
@@ -1032,7 +1033,7 @@ const title = (userMsg + (firstReply ? ' → ' + firstReply : '')).replace(/\s+/
             });
             const data = await response.json();
             this.state.currentChatId = data.id;
-            await this.saveMessageToHistory(firstReply);
+            const cleanReply2=(firstReply||'').replace(/^TITLE:.*\n\n?/,''); await this.saveMessageToHistory(cleanReply2);
             await this.loadChatList();
         } catch (e) {
             console.error('Failed to auto-save chat', e);
