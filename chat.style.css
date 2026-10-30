@@ -1933,3 +1933,5 @@ body.theme-light .app-header h1 {
   font-size: 0.85rem;
   font-style: italic;
 }
+
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
