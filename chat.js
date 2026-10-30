@@ -30,6 +30,7 @@ const SPARKS = [
 
 const SYSTEM_PROMPT = `Du bist Nemotron, ein hilfreicher KI-Assistent von NVIDIA.
 Antworte standardmäßig auf Deutsch, sofern der Nutzer keine andere Sprache verwendet.
+Beginne deine erste Antwort mit einer Zeile "TITLE: <kurzer Titel>" und danach einer Leerzeile.
 Formatiere deine Antworten immer mit Markdown:
 - **fett** für wichtige Begriffe
 - *kursiv* für Betonungen
@@ -985,7 +986,8 @@ class NemotronApp {
             }
 
             this.finishTrace('done');
-            bubble.innerHTML = this.renderMarkdown(fullReply || 'Keine Antwort erhalten.');
+            const _clean = (fullReply || '').replace(/^TITLE:.*\n\n?/, '');
+bubble.innerHTML = this.renderMarkdown(_clean || 'Keine Antwort erhalten.');
             this.state.history.push({ role: 'assistant', content: fullReply });
             if (fullReply) this.addBranchButton(bubble, this.state.history.length - 1);
             this.updateContextMeter();
@@ -1019,7 +1021,8 @@ class NemotronApp {
     }
 
     async autoSaveChat(firstReply) {
-        const title = this.state.history[1]?.content.substring(0, 30) || 'Neuer Chat';
+        const _m = (firstReply || '').match(/^TITLE:\s*(.+)/m);
+const title = (_m ? _m[1] : (firstReply || 'Neuer Chat')).trim().substring(0, 60);
         try {
             const response = await fetch(`${CONFIG.PROXY_URL}/chats`, {
                 method: 'POST',
@@ -1031,7 +1034,8 @@ class NemotronApp {
             });
             const data = await response.json();
             this.state.currentChatId = data.id;
-            await this.saveMessageToHistory(firstReply);
+            const _clean2 = (firstReply || '').replace(/^TITLE:.*\n\n?/, '');
+await this.saveMessageToHistory(_clean2);
             await this.loadChatList();
         } catch (e) {
             console.error('Failed to auto-save chat', e);
