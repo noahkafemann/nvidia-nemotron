@@ -265,16 +265,17 @@ class NemotronApp {
     }
 
     setupToggles() {
-        const applyToggle = (key, elId, className) => {
+        const applyToggle = (key, elId, className, defaultValue) => {
             const el = document.getElementById(elId);
             if (!el) return;
-            const val = localStorage.getItem(key) || (className ? 'On' : 'Off');
+            const val = localStorage.getItem(key) || defaultValue;
             el.textContent = val;
             if (className) document.body.classList.toggle(className, val === 'On');
         };
 
-        applyToggle(CONFIG.STORAGE_KEYS.STREAMING, 'streamToggle', '');
-        applyToggle(CONFIG.STORAGE_KEYS.COMPACT_MODE, 'compactToggle', 'compact-mode');
+        applyToggle(CONFIG.STORAGE_KEYS.STREAMING, 'streamToggle', '', 'On');
+        applyToggle(CONFIG.STORAGE_KEYS.COMPACT_MODE, 'compactToggle', 'compact-mode', 'On');
+        this.state.isStreaming = document.getElementById('streamToggle')?.textContent === 'On';
     }
 
     loadTheme() {
@@ -869,12 +870,13 @@ class NemotronApp {
         this.state.history.push({ role: 'user', content: text });
         this.updateContextMeter();
 
+        let useStream = this.state.isStreaming;
         const payload = {
             model: CONFIG.DEFAULT_MODEL,
             messages: this.state.history.map(message => ({ role: message.role, content: message.content })),
             temperature: this.state.temperature,
             max_tokens: this.state.maxTokens,
-            stream: this.state.isStreaming
+            stream: useStream
         };
         this.beginTrace(payload, promptStartedAt);
 
@@ -883,12 +885,32 @@ class NemotronApp {
 
         try {
             this.streamController = new AbortController();
-            const response = await fetch(`${CONFIG.PROXY_URL}/chat`, {
+            const requestChat = () => fetch(`${CONFIG.PROXY_URL}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
                 signal: this.streamController.signal
             });
+
+            let response;
+            try {
+                response = await requestChat();
+                if (!response.ok && useStream && response.status >= 500) {
+                    useStream = false;
+                    payload.stream = false;
+                    if (this.state.trace.request) this.state.trace.request.stream = false;
+                    this.setStatus('Streaming fehlgeschlagen, versuche ohne Streaming ...');
+                    response = await requestChat();
+                }
+            } catch (fetchError) {
+                if (fetchError.name === 'AbortError' || !useStream) throw fetchError;
+                useStream = false;
+                payload.stream = false;
+                if (this.state.trace.request) this.state.trace.request.stream = false;
+                this.setStatus('Streaming fehlgeschlagen, versuche ohne Streaming ...');
+                response = await requestChat();
+            }
+
             this.markTraceRequest();
 
             if (!response.ok) throw new Error(`Server Error: ${response.status}`);
@@ -896,7 +918,7 @@ class NemotronApp {
             bubble.classList.remove('typing');
             let fullReply = '';
 
-            if (this.state.isStreaming) {
+            if (useStream) {
                 if (!response.body) throw new Error('No response body received');
 
                 const reader = response.body.getReader();
@@ -980,7 +1002,12 @@ class NemotronApp {
             if (err.name === 'AbortError') {
                 this.setStatus('Abgebrochen');
             } else {
-                bubble.innerHTML = `<span style="color: var(--error)">Fehler: ${this.escapeHtml(err.message)}</span>`;
+                const message = err.name === 'TypeError'
+                    ? 'Server nicht erreichbar. Render startet möglicherweise gerade – bitte in einigen Sekunden erneut versuchen.'
+                    : /^Server Error: 5\d\d$/.test(err.message)
+                        ? 'Der Server hatte einen internen Fehler. Bitte versuche es erneut.'
+                        : err.message;
+                bubble.innerHTML = `<span style="color: var(--error)">Fehler: ${this.escapeHtml(message)}</span>`;
                 this.setStatus('Fehler', 'error');
             }
         } finally {

@@ -69,6 +69,14 @@ def after_request(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
     return response
 
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'ok',
+        'has_key': bool(os.environ.get('NVIDIA_API_KEY', '')),
+        'model': MODEL
+    }), 200
+
 @app.route('/auth/register', methods=['POST'])
 def register():
     try:
@@ -229,11 +237,12 @@ def chat():
         return jsonify({'error': 'Server-Konfigurationsfehler: API Key fehlt.'}), 500
 
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'Keine Daten empfangen'}), 400
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or not data:
+            return jsonify({'error': 'Ungültige JSON-Anfrage'}), 400
 
         stream = data.get('stream', False)
+        logger.info(f"Chat request: stream={stream}, messages={len(data.get('messages', []))}")
 
         if stream:
             def generate():
@@ -250,7 +259,7 @@ def chat():
                                 'stream': True
                             },
                             stream=True,
-                            timeout=60
+                            timeout=(10, 180)
                         )
                         if r.status_code != 200:
                             err_msg = json.dumps({'error': f'NVIDIA API Error {r.status_code}: {r.text}'})
@@ -281,9 +290,14 @@ def chat():
                     'max_tokens': data.get('max_tokens', 1024),
                     'stream': False
                 },
-                timeout=60
+                timeout=(10, 180)
             )
-            return jsonify(response.json()), response.status_code
+            if response.status_code != 200:
+                logger.error(f"NVIDIA non-streaming error {response.status_code}: {response.text[:500]}")
+            try:
+                return jsonify(response.json()), response.status_code
+            except ValueError:
+                return jsonify({'error': f'NVIDIA API Error {response.status_code}: {response.text[:500]}'}), response.status_code
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}")
         return jsonify({'error': f"Interner Serverfehler: {str(e)}"}), 500
