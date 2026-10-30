@@ -160,6 +160,11 @@ def handle_chats():
         chats.sort(key=lambda c: chat_sort_value(c.get('updated_at')), reverse=True)
 
         msgs_col = db.messages
+        # Count messages per chat in one aggregation instead of N queries
+        counts = {}
+        for m in msgs_col.aggregate([{'$group': {'_id': '$chat_id', 'n': {'$sum': 1}}}]):
+            counts[m['_id']] = m['n']
+
         result = []
         for c in chats:
             first_msg = msgs_col.find_one(
@@ -174,7 +179,7 @@ def handle_chats():
                 'id': c['id'],
                 'title': c.get('title', 'Neuer Chat'),
                 'updated_at': c.get('updated_at'),
-                'message_count': msgs_col.count_documents({'chat_id': c['id']}),
+                'message_count': counts.get(c['id'], 0),
                 'preview': preview
             })
         return jsonify(result), 200

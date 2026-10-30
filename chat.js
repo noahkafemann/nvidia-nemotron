@@ -1380,7 +1380,7 @@ class NemotronApp {
     addMessage(role, content, typing = false, branchable = true) {
         const div = document.createElement('div');
         div.className = 'msg ' + role;
-        const avatar = role === 'user' ? '&#128101;' : '&#128169;';
+        const avatar = role === 'user' ? '&#128101;' : 'N';
         const historyIndex = this.state.history.length;
         const rendered = typing
             ? '<span class="stream-cursor"></span>'
